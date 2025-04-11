@@ -1,16 +1,6 @@
-import { useEffect } from "react";
-import { useRouter } from "next/router";
 import Link from "next/link";
 
 export default function Custom404() {
-  const router = useRouter();
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      router.push("/not-found");
-    }
-  }, [router]);
-
   return (
     <div
       style={{
