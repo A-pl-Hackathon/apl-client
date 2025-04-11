@@ -1,0 +1,23 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm run build"
+
+[deploy]
+startCommand = "npm run start"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "on-failure"
+restartPolicyMaxRetries = 10
+
+[environments]
+  [environments.production]
+    envVars = [
+      { key = "NODE_ENV", value = "production" },
+      { key = "API_KEY", value = "${{ secrets.API_KEY }}" }
+    ]
+    plugins = [
+      { name = "sqlite", value = "latest" }
+    ]
+    persistentStorage = [
+      { path = "/data", size = "1Gi" }
+    ] 
