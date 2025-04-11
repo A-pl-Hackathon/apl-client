@@ -5,6 +5,11 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    disableOptimizedLoading: true,
+  },
+  output: "standalone",
+  poweredByHeader: false,
 };
 
 export default nextConfig;
