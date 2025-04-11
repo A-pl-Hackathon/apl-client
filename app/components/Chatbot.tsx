@@ -233,7 +233,7 @@ export default function Chatbot() {
                 )}
               </div>
               {message.showButtons && typingComplete[message.id] && (
-                <div className="flex space-x-2 mt-2 animate-fade-in">
+                <div className="flex space-x-2 mt-2 transition duration-300 ease-out opacity-100">
                   <button
                     onClick={() => handleButtonClick("go")}
                     className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"

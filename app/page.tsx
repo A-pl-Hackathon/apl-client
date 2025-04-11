@@ -35,7 +35,7 @@ export default function Home() {
 
       {/* Overlay with dashboard link */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen">
-        <div className="p-10 backdrop-blur-sm bg-black/30 rounded-2xl shadow-2xl border border-gray-600/30 text-center max-w-md animate-fade-in">
+        <div className="p-10 backdrop-blur-sm bg-black/30 rounded-2xl shadow-2xl border border-gray-600/30 text-center max-w-md transition duration-500 opacity-100">
           <h1 className="text-4xl font-bold text-white mb-6 animate-pulse">
             A.PL
           </h1>

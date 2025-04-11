@@ -42,7 +42,7 @@ export default function Error({
 
       {/* Error Content */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen">
-        <div className="p-10 backdrop-blur-sm bg-black/30 rounded-2xl shadow-2xl border border-gray-600/30 text-center max-w-md animate-fade-in">
+        <div className="p-10 backdrop-blur-sm bg-black/30 rounded-2xl shadow-2xl border border-gray-600/30 text-center max-w-md">
           <h2 className="text-4xl font-bold text-white mb-4">
             Something went wrong!
           </h2>
