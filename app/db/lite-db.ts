@@ -21,7 +21,9 @@ class LiteDatabase {
   private isInitializing = false;
 
   constructor() {
-    this.initializeDatabase();
+    if (typeof window !== "undefined") {
+      this.initializeDatabase();
+    }
   }
 
   private async initializeDatabase() {
