@@ -21,30 +21,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     setChatbotVisible(!chatbotVisible);
   };
 
-  const handleLogoClick = async () => {
-    if (isLogoLoading) return;
-
-    setIsLogoLoading(true);
-    try {
-      const response = await fetch("/api/your-endpoint", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "logo_click",
-          timestamp: new Date().toISOString(),
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to send logo action");
-      }
-    } catch (error) {
-      console.error("Error sending logo action:", error);
-    } finally {
-      setIsLogoLoading(false);
-    }
+  const handleLogoClick = () => {
+    window.location.href = "/";
   };
 
   const handleGoClick = async () => {

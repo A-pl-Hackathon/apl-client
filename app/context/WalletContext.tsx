@@ -154,25 +154,6 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   }, [contract, account]);
 
-  useEffect(() => {
-    const checkConnection = async () => {
-      if (typeof window === "undefined" || !window.ethereum) return;
-
-      try {
-        const accounts = await window.ethereum.request({
-          method: "eth_accounts",
-        });
-        if (accounts.length > 0) {
-          connectWallet();
-        }
-      } catch (error) {
-        console.error("Error checking existing connection:", error);
-      }
-    };
-
-    checkConnection();
-  }, []);
-
   const value = {
     account,
     connecting,

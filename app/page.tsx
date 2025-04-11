@@ -35,10 +35,14 @@ export default function Home() {
 
       {/* Overlay with dashboard link */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen">
-        <div className="p-10 backdrop-blur-sm bg-black/30 rounded-2xl shadow-2xl border border-gray-600/30 text-center max-w-md transition duration-500 opacity-100">
+        <div className="p-10 backdrop-blur-sm bg-black/30 rounded-2xl shadow-2xl border border-gray-600/30 text-center max-w-md">
           <h1 className="text-4xl font-bold text-white mb-6 animate-pulse">
             A.PL
           </h1>
+          <p className="text-lg text-gray-300 mb-8">
+            Enter the A.PL dashboard to connect your wallet and access the full
+            functionality.
+          </p>
           <Link
             href="/dashboard"
             className="px-8 py-3 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700 transition-all transform hover:scale-105 active:scale-95 inline-block"
