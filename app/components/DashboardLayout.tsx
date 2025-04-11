@@ -106,15 +106,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-20 bg-black/90 backdrop-blur-md shadow-md h-15 flex items-center px-4 border-b border-gray-800/50">
         <div className="container mx-auto flex justify-between items-center">
-          <button
-            onClick={handleLogoClick}
-            disabled={isLogoLoading}
+          <Link
+            href="/"
             className={`text-white text-2xl font-bold tracking-wider hover:text-blue-400 transition-colors transform hover:scale-105 active:scale-95 ${
               isLogoLoading ? "opacity-70" : ""
             }`}
+            onClick={handleLogoClick}
           >
             A.PL
-          </button>
+          </Link>
           <div className="flex items-center space-x-4">
             <Link
               href="/database"
