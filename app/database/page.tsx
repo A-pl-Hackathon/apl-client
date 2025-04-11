@@ -5,110 +5,40 @@ import Link from "next/link";
 import DashboardLayout from "../components/DashboardLayout";
 
 // Type definitions
-interface Post {
-  id?: number;
-  author: string;
-  content: string;
-  createdAt: string;
+interface Wallet {
+  address: string;
+  personalData: string;
 }
 
-interface Comment {
-  id?: number;
-  postId: number;
-  author: string;
-  content: string;
-  createdAt: string;
-  readAt: string | null;
-  likedAt: string | null;
-}
-
-const PostCard: React.FC<{ post: Post; comments: Comment[] }> = ({
-  post,
-  comments,
-}) => {
+const WalletCard: React.FC<{ wallet: Wallet }> = ({ wallet }) => {
   const [expanded, setExpanded] = useState(false);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-xl font-bold">{post.author}</h3>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {post.createdAt}
-        </span>
-      </div>
-      <p className="text-gray-700 dark:text-gray-300 mb-4">{post.content}</p>
-
-      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <h3 className="text-xl font-bold truncate w-3/4">{wallet.address}</h3>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex items-center text-blue-500 hover:text-blue-700"
+          className="text-blue-500 hover:text-blue-700"
         >
-          <span>
-            {expanded ? "Hide Comments" : `View ${comments.length} Comments`}
-          </span>
-          <svg
-            className={`w-4 h-4 ml-1 transition-transform ${
-              expanded ? "rotate-180" : ""
-            }`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
+          {expanded ? "Hide Details" : "View Details"}
         </button>
-
-        {expanded && (
-          <div className="mt-4 space-y-3">
-            {comments.length > 0 ? (
-              comments.map((comment) => (
-                <div
-                  key={comment.id}
-                  className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg"
-                >
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-medium">{comment.author}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {comment.createdAt}
-                    </span>
-                  </div>
-                  <p className="text-gray-700 dark:text-gray-300">
-                    {comment.content}
-                  </p>
-                  <div className="flex mt-2 text-xs text-gray-500 dark:text-gray-400 space-x-4">
-                    <span>
-                      {comment.readAt ? `Read: ${comment.readAt}` : "Unread"}
-                    </span>
-                    <span>
-                      {comment.likedAt
-                        ? `Liked: ${comment.likedAt}`
-                        : "No likes"}
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500 dark:text-gray-400 text-center">
-                No comments available.
-              </p>
-            )}
-          </div>
-        )}
       </div>
+
+      {expanded && (
+        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mt-4">
+          <h4 className="font-semibold mb-2">Personal Data:</h4>
+          <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+            {wallet.personalData}
+          </p>
+        </div>
+      )}
     </div>
   );
 };
 
 export default function DatabasePage() {
-  const [postsWithComments, setPostsWithComments] = useState<
-    Array<Post & { comments: Comment[] }>
-  >([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -128,7 +58,7 @@ export default function DatabasePage() {
           throw new Error(result.error || "An unknown error occurred.");
         }
 
-        setPostsWithComments(result.data);
+        setWallets(result.data);
       } catch (err: any) {
         console.error("Error loading data:", err);
         setError(err.message || "An error occurred while loading data.");
@@ -144,17 +74,12 @@ export default function DatabasePage() {
     window.location.reload();
   };
 
-  const totalComments = postsWithComments.reduce(
-    (total, post) => total + post.comments.length,
-    0
-  );
-
   return (
     <DashboardLayout>
       <div className="mb-8">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold mb-2 text-white">
-            Database Viewer
+            Wallet Database
           </h1>
           <div className="flex space-x-2">
             <button
@@ -172,7 +97,7 @@ export default function DatabasePage() {
           </div>
         </div>
         <p className="text-gray-400">
-          View posts and comments stored in the SQLite database.
+          View wallet addresses and personal data stored in the SQLite database.
         </p>
       </div>
 
@@ -189,25 +114,21 @@ export default function DatabasePage() {
         <div className="grid grid-cols-1 gap-6">
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
             <div className="flex items-center space-x-2 text-sm">
-              <span className="font-semibold">Total Posts:</span>
+              <span className="font-semibold">Total Wallets:</span>
               <span className="bg-blue-500 text-white px-2 py-1 rounded-full">
-                {postsWithComments.length}
-              </span>
-              <span className="font-semibold ml-4">Total Comments:</span>
-              <span className="bg-green-500 text-white px-2 py-1 rounded-full">
-                {totalComments}
+                {wallets.length}
               </span>
             </div>
           </div>
 
-          {postsWithComments.length > 0 ? (
-            postsWithComments.map((post) => (
-              <PostCard key={post.id} post={post} comments={post.comments} />
+          {wallets.length > 0 ? (
+            wallets.map((wallet) => (
+              <WalletCard key={wallet.address} wallet={wallet} />
             ))
           ) : (
             <div className="text-center py-8">
               <p className="text-xl text-gray-500 dark:text-gray-400">
-                No data available.
+                No wallet data available.
               </p>
             </div>
           )}

@@ -13,11 +13,38 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [chatbotVisible, setChatbotVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLogoLoading, setIsLogoLoading] = useState(false);
   const { account, connecting, connectWallet, disconnectWallet, tokenBalance } =
     useWallet();
 
   const toggleChatbot = () => {
     setChatbotVisible(!chatbotVisible);
+  };
+
+  const handleLogoClick = async () => {
+    if (isLogoLoading) return;
+
+    setIsLogoLoading(true);
+    try {
+      const response = await fetch("/api/your-endpoint", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "logo_click",
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to send logo action");
+      }
+    } catch (error) {
+      console.error("Error sending logo action:", error);
+    } finally {
+      setIsLogoLoading(false);
+    }
   };
 
   const handleGoClick = async () => {
@@ -79,9 +106,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-20 bg-black/90 backdrop-blur-md shadow-md h-15 flex items-center px-4 border-b border-gray-800/50">
         <div className="container mx-auto flex justify-between items-center">
-          <div className="text-white text-2xl font-bold tracking-wider">
+          <button
+            onClick={handleLogoClick}
+            disabled={isLogoLoading}
+            className={`text-white text-2xl font-bold tracking-wider hover:text-blue-400 transition-colors transform hover:scale-105 active:scale-95 ${
+              isLogoLoading ? "opacity-70" : ""
+            }`}
+          >
             A.PL
-          </div>
+          </button>
           <div className="flex items-center space-x-4">
             <Link
               href="/database"
@@ -138,8 +171,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </button>
               </div>
             )}
-
-            <div className="text-white">Welcome, Junbrro!</div>
           </div>
         </div>
       </nav>
