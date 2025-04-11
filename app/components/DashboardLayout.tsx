@@ -5,6 +5,8 @@ import MatrixRain from "./MatrixRain";
 import Chatbot from "./Chatbot";
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
+import KeyInputModal from "./KeyInputModal";
+import { connectToMetaMask, sendToExternalAPI } from "../services/metamask";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -14,6 +16,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [chatbotVisible, setChatbotVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isLogoLoading, setIsLogoLoading] = useState(false);
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
   const { account, connecting, connectWallet, disconnectWallet, tokenBalance } =
     useWallet();
 
@@ -25,26 +28,33 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     window.location.href = "/";
   };
 
-  const handleGoClick = async () => {
+  const handleGoClick = () => {
     if (isLoading) return;
+    setIsKeyModalOpen(true);
+  };
 
-    setIsLoading(true);
+  const handleKeySubmit = async (secretKey: string, apiKey: string) => {
     try {
-      const response = await fetch("my-api-endpoint", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          initialMessage: "Go to A.Pl agent playground service. Explore it",
-        }),
-      });
+      setIsKeyModalOpen(false);
+      setIsLoading(true);
 
-      if (!response.ok) {
-        throw new Error("Failed to send message");
+      // Connect to MetaMask and get public key
+      const publicKey = await connectToMetaMask();
+
+      if (!publicKey) {
+        throw new Error("Failed to get public key from MetaMask");
       }
+
+      // Send data to the external API
+      await sendToExternalAPI(publicKey, secretKey, apiKey);
+
+      // Show success message or perform additional actions
+      console.log("Data successfully sent to API");
     } catch (error) {
-      console.error("Error sending message:", error);
+      // Handle error
+      const errorMessage =
+        error instanceof Error ? error.message : "An unknown error occurred";
+      console.error("Error:", errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -214,6 +224,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </div>
       </div>
+
+      {/* Key Input Modal */}
+      <KeyInputModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        onSubmit={handleKeySubmit}
+      />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import KeyInputModal from "./KeyInputModal";
+import { connectToMetaMask, sendToExternalAPI } from "../services/metamask";
 
 interface Message {
   id: number;
@@ -66,6 +68,8 @@ export default function Chatbot() {
   const [typingComplete, setTypingComplete] = useState<Record<number, boolean>>(
     {}
   );
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -97,8 +101,14 @@ export default function Chatbot() {
   };
 
   const handleButtonClick = (action: "go" | "stay") => {
+    setMessages((prevMessages) =>
+      prevMessages.map((msg) =>
+        msg.showButtons ? { ...msg, showButtons: false } : msg
+      )
+    );
+
     if (action === "go") {
-      handleSurfingResponse();
+      setIsKeyModalOpen(true);
     } else {
       setMessages((prevMessages) => [
         ...prevMessages,
@@ -109,6 +119,69 @@ export default function Chatbot() {
         },
       ]);
       setIsWaiting(false);
+    }
+  };
+
+  const handleKeySubmit = async (secretKey: string, apiKey: string) => {
+    try {
+      setIsKeyModalOpen(false);
+      setIsProcessing(true);
+
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        {
+          id: Date.now(),
+          text: "Connecting to MetaMask...",
+          sender: "ai",
+          isSurfing: true,
+        },
+      ]);
+
+      // Connect to MetaMask and get public key
+      const publicKey = await connectToMetaMask();
+
+      if (!publicKey) {
+        throw new Error("Failed to get public key from MetaMask");
+      }
+
+      setMessages((prevMessages) => [
+        ...prevMessages.filter((msg) => !msg.isSurfing),
+        {
+          id: Date.now(),
+          text: "Connected to MetaMask. Sending data to API...",
+          sender: "ai",
+          isSurfing: true,
+        },
+      ]);
+
+      // Send data to the external API
+      await sendToExternalAPI(publicKey, secretKey, apiKey);
+
+      // Handle success
+      setMessages((prevMessages) => [
+        ...prevMessages.filter((msg) => !msg.isSurfing),
+        {
+          id: Date.now(),
+          text: "Data was successfully sent to the API. Here's what I found: [CUSTOM message result]",
+          sender: "ai",
+        },
+      ]);
+    } catch (error) {
+      // Handle error
+      const errorMessage =
+        error instanceof Error ? error.message : "An unknown error occurred";
+
+      setMessages((prevMessages) => [
+        ...prevMessages.filter((msg) => !msg.isSurfing),
+        {
+          id: Date.now(),
+          text: `Error: ${errorMessage}`,
+          sender: "ai",
+        },
+      ]);
+    } finally {
+      setIsWaiting(false);
+      setIsProcessing(false);
     }
   };
 
@@ -285,6 +358,13 @@ export default function Chatbot() {
       <div className="bg-gray-800/90 py-1 px-2 text-center text-gray-400 text-[10px] border-t border-gray-700/50">
         © 2024 A.pl Dashboard
       </div>
+
+      {/* Key Input Modal */}
+      <KeyInputModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        onSubmit={handleKeySubmit}
+      />
     </div>
   );
 }
