@@ -120,7 +120,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               href="/database"
               className="text-white hover:text-blue-400 transition-colors"
             >
-              Dashboard
+              Database
             </Link>
             <Link
               href="/tokens"
