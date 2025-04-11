@@ -4,6 +4,7 @@ import React, { ReactNode, useState } from "react";
 import MatrixRain from "./MatrixRain";
 import Chatbot from "./Chatbot";
 import Link from "next/link";
+import { useWallet } from "../context/WalletContext";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -12,6 +13,8 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [chatbotVisible, setChatbotVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const { account, connecting, connectWallet, disconnectWallet, tokenBalance } =
+    useWallet();
 
   const toggleChatbot = () => {
     setChatbotVisible(!chatbotVisible);
@@ -40,6 +43,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const formatAccount = (address: string) => {
+    return `${address.substring(0, 6)}...${address.substring(
+      address.length - 4
+    )}`;
   };
 
   return (
@@ -80,6 +89,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             >
               Dashboard
             </Link>
+            <Link
+              href="/tokens"
+              className="text-white hover:text-blue-400 transition-colors"
+            >
+              Tokens
+            </Link>
             <button
               onClick={handleGoClick}
               disabled={isLoading}
@@ -89,6 +104,41 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             >
               {isLoading ? "Sending..." : "Go!"}
             </button>
+
+            {!account ? (
+              <button
+                onClick={connectWallet}
+                disabled={connecting}
+                className="flex items-center space-x-1 px-3 py-1.5 bg-orange-500 text-white rounded-full font-semibold hover:bg-orange-600 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <img
+                  src="/metamask-fox.svg"
+                  alt="MetaMask"
+                  className="w-4 h-4"
+                />
+                <span>{connecting ? "Connecting..." : "Connect Wallet"}</span>
+              </button>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <div className="flex flex-col items-end">
+                  <span className="text-white text-xs">
+                    {formatAccount(account)}
+                  </span>
+                  {tokenBalance !== "0" && (
+                    <span className="text-orange-400 text-xs">
+                      {tokenBalance} MTK
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={disconnectWallet}
+                  className="text-xs px-2 py-1 bg-gray-700 text-white rounded hover:bg-gray-600"
+                >
+                  Disconnect
+                </button>
+              </div>
+            )}
+
             <div className="text-white">Welcome, Junbrro!</div>
           </div>
         </div>
