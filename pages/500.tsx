@@ -1,11 +1,6 @@
 import Link from "next/link";
-import { NextPage } from "next";
 
-interface ErrorProps {
-  statusCode?: number;
-}
-
-const Error: NextPage<ErrorProps> = ({ statusCode = 500 }) => {
+export default function Custom500() {
   return (
     <div
       style={{
@@ -16,15 +11,15 @@ const Error: NextPage<ErrorProps> = ({ statusCode = 500 }) => {
         height: "100vh",
         background: "#000",
         color: "#fff",
-        textAlign: "center",
         padding: "0 20px",
+        textAlign: "center",
       }}
     >
       <h1 style={{ fontSize: "2rem", marginBottom: "1rem" }}>
-        {statusCode ? `Error ${statusCode}` : "An unexpected error occurred"}
+        500 - Server Error
       </h1>
       <p style={{ marginBottom: "2rem" }}>
-        We apologize for the inconvenience.
+        An unexpected error occurred on the server.
       </p>
       <Link
         href="/"
@@ -40,6 +35,4 @@ const Error: NextPage<ErrorProps> = ({ statusCode = 500 }) => {
       </Link>
     </div>
   );
-};
-
-export default Error;
+}

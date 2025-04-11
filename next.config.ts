@@ -5,11 +5,12 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  experimental: {
-    disableOptimizedLoading: true,
-  },
   output: "standalone",
   poweredByHeader: false,
+  reactStrictMode: false,
+  async redirects() {
+    return [];
+  },
 };
 
 export default nextConfig;
