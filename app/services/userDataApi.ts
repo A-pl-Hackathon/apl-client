@@ -15,9 +15,12 @@ export async function sendUserData(payload: UserDataPayload): Promise<any> {
 
   console.log("Sending payload to API:", JSON.stringify(finalPayload));
 
+  const apiBaseUrl =
+    process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+  const apiUrl = `${apiBaseUrl}/user-data/`;
+
   try {
     console.log("Attempting to use external API directly with no-cors...");
-    const apiUrl = "https://api-dashboard.a-pl.xyz/user-data/";
     console.log("Using external URL:", apiUrl);
 
     const externalResponse = await fetch(apiUrl, {
@@ -49,17 +52,14 @@ export async function sendUserData(payload: UserDataPayload): Promise<any> {
 
     try {
       console.log("Trying external API with cors mode...");
-      const corsResponse = await fetch(
-        "https://api-dashboard.a-pl.xyz/user-data/",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(finalPayload),
-          mode: "cors",
-        }
-      );
+      const corsResponse = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(finalPayload),
+        mode: "cors",
+      });
 
       const responseText = await corsResponse.text();
       console.log("CORS mode response:", responseText);
@@ -104,7 +104,7 @@ export async function sendUserData(payload: UserDataPayload): Promise<any> {
             console.log(
               `Attempting direct request to port ${port || "default"}...`
             );
-            const url = `https://api-dashboard.a-pl.xyz${port}/user-data/`;
+            const url = `${apiBaseUrl}${port}/user-data/`;
 
             console.log(`Testing connectivity to ${url}`);
             const testResponse = await fetch(url, {

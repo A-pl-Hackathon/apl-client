@@ -38,71 +38,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const handleAuthSubmit = async (authorized: boolean) => {
     try {
-      setIsAuthModalOpen(false);
-
       if (!authorized) return;
 
       setIsLoading(true);
-
-      const walletAddress = await connectToMetaMask();
-
-      if (!walletAddress) {
-        throw new Error("Failed to get wallet address from MetaMask");
-      }
-
-      // Get the selected model from the UserDataCard
-      const userDataCardElement = document.querySelector(
-        "[data-selected-model]"
-      );
-      const modelFromCard = userDataCardElement
-        ? userDataCardElement.getAttribute("data-selected-model")
-        : selectedModel;
-
-      const payload = {
-        personalData: {
-          walletAddress,
-          data: "", // Empty data as we're just authorizing
-        },
-        agentModel: modelFromCard || selectedModel,
-      };
-
-      console.log("Sending payload:", JSON.stringify(payload));
-
-      try {
-        await sendUserData(payload);
-        console.log("Data successfully sent to API");
-      } catch (apiError) {
-        console.error("Error sending data via API service:", apiError);
-
-        // Direct fallback to the external API
-        console.log("Trying direct connection to external API...");
-        try {
-          const directResponse = await fetch(
-            "https://api-dashboard.a-pl.xyz/user-data/",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(payload),
-              mode: "cors",
-            }
-          );
-
-          if (!directResponse.ok) {
-            const errorText = await directResponse.text();
-            console.error("Direct API error:", errorText);
-            throw new Error(
-              `Direct API request failed: ${directResponse.status}`
-            );
-          }
-
-          console.log("Direct API call successful");
-        } catch (directError) {
-          console.error("Direct API call also failed:", directError);
-          throw directError;
-        }
-      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";
