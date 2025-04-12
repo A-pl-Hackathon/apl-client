@@ -41,15 +41,30 @@ export default function DatabasePage() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
-        const response = await fetch("/api/database");
+        setError(null);
+
+        // Use absolute URL with origin to ensure correct routing
+        const apiUrl = `${window.location.origin}/api/database`;
+        console.log(`Fetching data from: ${apiUrl}`);
+
+        const response = await fetch(apiUrl, {
+          // Adding cache: 'no-store' to prevent caching issues
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+          },
+        });
 
         if (!response.ok) {
-          throw new Error(`API request failed: ${response.status}`);
+          throw new Error(
+            `API request failed: ${response.status} ${response.statusText}`
+          );
         }
 
         const result = await response.json();
@@ -59,19 +74,28 @@ export default function DatabasePage() {
         }
 
         setWallets(result.data);
+        setRetryCount(0); // Reset retry count on success
       } catch (err: any) {
         console.error("Error loading data:", err);
         setError(err.message || "An error occurred while loading data.");
+
+        // Auto-retry logic (maximum 3 retries)
+        if (retryCount < 3) {
+          console.log(`Retrying (${retryCount + 1}/3) in 2 seconds...`);
+          setTimeout(() => {
+            setRetryCount((prev) => prev + 1);
+          }, 2000);
+        }
       } finally {
         setLoading(false);
       }
     }
 
     fetchData();
-  }, []);
+  }, [retryCount]); // Re-fetch when retryCount changes
 
   const handleRefresh = () => {
-    window.location.reload();
+    setRetryCount((prev) => prev + 1); // Increment retry count to trigger refetch
   };
 
   return (
@@ -109,6 +133,12 @@ export default function DatabasePage() {
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
           <strong className="font-bold">Error!</strong>
           <span className="block sm:inline"> {error}</span>
+          <button
+            onClick={handleRefresh}
+            className="mt-2 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">

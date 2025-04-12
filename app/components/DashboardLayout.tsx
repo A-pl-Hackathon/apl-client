@@ -5,8 +5,10 @@ import MatrixRain from "./MatrixRain";
 import Chatbot from "./Chatbot";
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
-import KeyInputModal from "./KeyInputModal";
-import { connectToMetaMask, sendToExternalAPI } from "../services/metamask";
+import AuthorizationModal from "./AuthorizationModal";
+import { connectToMetaMask } from "../services/metamask";
+import { sendUserData } from "../services/userDataApi";
+import UserDataCard from "./UserDataCard";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -16,7 +18,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [chatbotVisible, setChatbotVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isLogoLoading, setIsLogoLoading] = useState(false);
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("gpt-3.5-turbo");
   const { account, connecting, connectWallet, disconnectWallet, tokenBalance } =
     useWallet();
 
@@ -30,28 +33,43 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const handleGoClick = () => {
     if (isLoading) return;
-    setIsKeyModalOpen(true);
+    setIsAuthModalOpen(true);
   };
 
-  const handleKeySubmit = async (secretKey: string, apiKey: string) => {
+  const handleAuthSubmit = async (authorized: boolean) => {
     try {
-      setIsKeyModalOpen(false);
+      setIsAuthModalOpen(false);
+
+      if (!authorized) return;
+
       setIsLoading(true);
 
-      // Connect to MetaMask and get public key
-      const publicKey = await connectToMetaMask();
+      const walletAddress = await connectToMetaMask();
 
-      if (!publicKey) {
-        throw new Error("Failed to get public key from MetaMask");
+      if (!walletAddress) {
+        throw new Error("Failed to get wallet address from MetaMask");
       }
 
-      // Send data to the external API
-      await sendToExternalAPI(publicKey, secretKey, apiKey);
+      // Get the selected model from the UserDataCard
+      const userDataCardElement = document.querySelector(
+        "[data-selected-model]"
+      );
+      const modelFromCard = userDataCardElement
+        ? userDataCardElement.getAttribute("data-selected-model")
+        : selectedModel;
 
-      // Show success message or perform additional actions
+      const payload = {
+        personalData: {
+          walletAddress,
+          data: "", // Empty data as we're just authorizing
+        },
+        agentModel: modelFromCard || selectedModel,
+      };
+
+      await sendUserData(payload);
+
       console.log("Data successfully sent to API");
     } catch (error) {
-      // Handle error
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";
       console.error("Error:", errorMessage);
@@ -225,11 +243,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
       </div>
 
-      {/* Key Input Modal */}
-      <KeyInputModal
-        isOpen={isKeyModalOpen}
-        onClose={() => setIsKeyModalOpen(false)}
-        onSubmit={handleKeySubmit}
+      {/* Authorization Modal */}
+      <AuthorizationModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSubmit={handleAuthSubmit}
       />
     </div>
   );

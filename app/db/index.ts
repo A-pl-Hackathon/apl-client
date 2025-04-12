@@ -15,8 +15,4 @@ if (typeof window === "undefined") {
     });
 }
 
-export async function exportDatabase(): Promise<Uint8Array | null> {
-  return liteDb.exportDatabase();
-}
-
 export default liteDb;

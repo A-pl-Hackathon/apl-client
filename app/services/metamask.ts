@@ -16,7 +16,7 @@ export async function connectToMetaMask(): Promise<string | null> {
     });
 
     if (accounts && accounts.length > 0) {
-      return accounts[0] as string; // Return the public key
+      return accounts[0] as string;
     }
 
     return null;
@@ -27,20 +27,38 @@ export async function connectToMetaMask(): Promise<string | null> {
 }
 
 export async function sendToExternalAPI(
-  publicKey: string,
+  walletAddress: string,
   secretKey: string,
   apiKey: string
 ): Promise<any> {
   try {
+    let personalData = "";
+
+    try {
+      const walletDataResponse = await fetch(
+        `/api/wallet-data?address=${walletAddress}`
+      );
+      if (walletDataResponse.ok) {
+        const walletData = await walletDataResponse.json();
+        personalData = walletData.personalData || "";
+      }
+    } catch (dataError) {
+      console.error("Error fetching wallet data:", dataError);
+    }
+
     const response = await fetch("/api/custom", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        publicKey,
+        publicKey: walletAddress,
         secretKey,
         apiKey,
+        personalData: {
+          walletAddress: walletAddress,
+          data: personalData,
+        },
       }),
     });
 

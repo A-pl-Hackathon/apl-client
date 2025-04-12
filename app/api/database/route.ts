@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-let liteDb: any;
-let seedDatabaseWithFakeData: any;
+// Define module variables outside function scope
+let liteDb: any = null;
+let seedDatabaseWithFakeData: any = null;
 
+// Immediately load modules on server-side
 if (typeof window === "undefined") {
   import("@/app/db/lite-db").then((module) => {
     liteDb = module.default;
@@ -14,7 +16,9 @@ if (typeof window === "undefined") {
 
 export async function GET() {
   try {
+    // Ensure modules are loaded
     if (!liteDb || !seedDatabaseWithFakeData) {
+      console.log("Loading database modules...");
       const liteDbModule = await import("@/app/db/lite-db");
       liteDb = liteDbModule.default;
 
@@ -22,9 +26,13 @@ export async function GET() {
       seedDatabaseWithFakeData = seedModule.seedDatabaseWithFakeData;
     }
 
+    // Seed the database
     await seedDatabaseWithFakeData();
 
-    const wallets = liteDb.getAllWallets();
+    // Get all wallets - note the await for IndexedDB operations
+    const wallets = await liteDb.getAllWallets();
+
+    console.log(`Retrieved ${wallets.length} wallets from database`);
 
     return NextResponse.json({
       success: true,
@@ -64,7 +72,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const wallet = liteDb.getWalletByAddress(address);
+    const wallet = await liteDb.getWalletByAddress(address);
 
     if (!wallet && !personalData) {
       return NextResponse.json(
@@ -77,7 +85,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Update or create wallet
-    const updatedWallet = liteDb.upsertWallet({
+    const updatedWallet = await liteDb.upsertWallet({
       address,
       personalData: personalData || (wallet ? wallet.personalData : ""),
     });
@@ -121,7 +129,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const success = liteDb.deleteWallet(address);
+    const success = await liteDb.deleteWallet(address);
 
     if (!success) {
       return NextResponse.json(

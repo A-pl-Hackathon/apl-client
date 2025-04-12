@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import KeyInputModal from "./KeyInputModal";
-import { connectToMetaMask, sendToExternalAPI } from "../services/metamask";
+import AuthorizationModal from "./AuthorizationModal";
+import { connectToMetaMask } from "../services/metamask";
+import { sendUserData } from "../services/userDataApi";
 
 interface Message {
   id: number;
@@ -12,6 +13,44 @@ interface Message {
   showButtons?: boolean;
   isSurfing?: boolean;
 }
+
+// AI model types
+type AIModel = {
+  id: string;
+  name: string;
+  provider: string;
+  available: boolean;
+};
+
+const AI_MODELS: AIModel[] = [
+  {
+    id: "gpt-3.5-turbo",
+    name: "GPT-3.5 Turbo",
+    provider: "OpenAI",
+    available: true,
+  },
+  { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", available: true },
+  { id: "gemini-2.0", name: "Gemini 2.0", provider: "Google", available: true },
+  {
+    id: "claude-3-opus",
+    name: "Claude 3 Opus",
+    provider: "Anthropic",
+    available: false,
+  },
+  { id: "llama-3", name: "Llama 3", provider: "Meta", available: false },
+  {
+    id: "mistral-large",
+    name: "Mistral Large",
+    provider: "Mistral AI",
+    available: false,
+  },
+  {
+    id: "gpt-4-turbo",
+    name: "GPT-4 Turbo",
+    provider: "OpenAI",
+    available: false,
+  },
+];
 
 const TypingIndicator = () => (
   <div className="flex space-x-2 items-center px-2">
@@ -68,8 +107,10 @@ export default function Chatbot() {
   const [typingComplete, setTypingComplete] = useState<Record<number, boolean>>(
     {}
   );
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>("gpt-3.5-turbo");
+  const [showModelSelector, setShowModelSelector] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -108,7 +149,7 @@ export default function Chatbot() {
     );
 
     if (action === "go") {
-      setIsKeyModalOpen(true);
+      setIsAuthModalOpen(true);
     } else {
       setMessages((prevMessages) => [
         ...prevMessages,
@@ -122,9 +163,23 @@ export default function Chatbot() {
     }
   };
 
-  const handleKeySubmit = async (secretKey: string, apiKey: string) => {
+  const handleAuthSubmit = async (authorized: boolean) => {
     try {
-      setIsKeyModalOpen(false);
+      setIsAuthModalOpen(false);
+
+      if (!authorized) {
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            id: Date.now(),
+            text: "Authorization denied. No data will be sent.",
+            sender: "ai",
+          },
+        ]);
+        setIsWaiting(false);
+        return;
+      }
+
       setIsProcessing(true);
 
       setMessages((prevMessages) => [
@@ -137,11 +192,10 @@ export default function Chatbot() {
         },
       ]);
 
-      // Connect to MetaMask and get public key
-      const publicKey = await connectToMetaMask();
+      const walletAddress = await connectToMetaMask();
 
-      if (!publicKey) {
-        throw new Error("Failed to get public key from MetaMask");
+      if (!walletAddress) {
+        throw new Error("Failed to get wallet address from MetaMask");
       }
 
       setMessages((prevMessages) => [
@@ -154,20 +208,26 @@ export default function Chatbot() {
         },
       ]);
 
-      // Send data to the external API
-      await sendToExternalAPI(publicKey, secretKey, apiKey);
+      // Send user data using new API
+      const payload = {
+        personalData: {
+          walletAddress,
+          data: "", // Empty data as we're just authorizing
+        },
+        agentModel: selectedModel,
+      };
 
-      // Handle success
+      await sendUserData(payload);
+
       setMessages((prevMessages) => [
         ...prevMessages.filter((msg) => !msg.isSurfing),
         {
           id: Date.now(),
-          text: "Data was successfully sent to the API. Here's what I found: [CUSTOM message result]",
+          text: "Data was successfully sent to the API. Key pair for Sepolia ETH has been created.",
           sender: "ai",
         },
       ]);
     } catch (error) {
-      // Handle error
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";
 
@@ -263,6 +323,59 @@ export default function Chatbot() {
       <div className="bg-gray-800/90 py-2 px-4 text-white border-b border-gray-700/50 flex justify-between items-center">
         <h2 className="text-lg font-bold">Chatbot</h2>
         <div className="flex items-center">
+          <div className="relative">
+            <button
+              onClick={() => setShowModelSelector(!showModelSelector)}
+              className="flex items-center text-xs px-2 py-1 bg-gray-700 rounded hover:bg-gray-600 transition-colors mr-3"
+            >
+              <span>
+                {AI_MODELS.find((m) => m.id === selectedModel)?.name ||
+                  selectedModel}
+              </span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-3 w-3 ml-1"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+            {showModelSelector && (
+              <div className="absolute top-full right-0 mt-1 w-48 bg-gray-800 rounded-md shadow-lg z-50 border border-gray-700">
+                <div className="py-1 max-h-48 overflow-y-auto">
+                  {AI_MODELS.map((model) => (
+                    <button
+                      key={model.id}
+                      onClick={() => {
+                        if (model.available) {
+                          setSelectedModel(model.id);
+                          setShowModelSelector(false);
+                        }
+                      }}
+                      className={`w-full text-left px-4 py-2 text-xs ${
+                        model.id === selectedModel
+                          ? "bg-blue-600"
+                          : model.available
+                          ? "hover:bg-gray-700"
+                          : "opacity-50 cursor-not-allowed"
+                      } ${!model.available ? "text-gray-500" : "text-white"}`}
+                      disabled={!model.available}
+                    >
+                      <div className="font-semibold">{model.name}</div>
+                      <div className="text-xs opacity-75">{model.provider}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="h-3 w-3 bg-green-500 rounded-full mr-2"></div>
           <span className="text-xs">Online</span>
         </div>
@@ -359,11 +472,11 @@ export default function Chatbot() {
         © 2024 A.pl Dashboard
       </div>
 
-      {/* Key Input Modal */}
-      <KeyInputModal
-        isOpen={isKeyModalOpen}
-        onClose={() => setIsKeyModalOpen(false)}
-        onSubmit={handleKeySubmit}
+      {/* Authorization Modal */}
+      <AuthorizationModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSubmit={handleAuthSubmit}
       />
     </div>
   );

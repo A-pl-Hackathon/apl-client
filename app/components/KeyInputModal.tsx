@@ -50,15 +50,15 @@ export default function KeyInputModal({
               className="block text-gray-300 mb-2 text-sm"
               htmlFor="apiKey"
             >
-              API Key
+              Agent API Key
             </label>
             <input
-              id="apiKey"
+              id="openai-apiKey"
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               className="w-full bg-gray-700 text-white px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter your API key"
+              placeholder="Enter your agent API (ex: openai) key"
               required
             />
           </div>

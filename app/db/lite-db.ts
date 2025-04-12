@@ -9,175 +9,185 @@ export function formatDateKST() {
   return now.toISOString().replace("T", " ").substring(0, 19);
 }
 
-type SqlJsDb = any;
-type SqlJsStatic = any;
-
-let isDbInitialized = false;
+// Memory cache for wallets
 let walletsCache: Wallet[] = [];
 
 class LiteDatabase {
-  private db: SqlJsDb | null = null;
-  private SQL: SqlJsStatic | null = null;
-  private isInitializing = false;
+  private dbName = "walletDB";
+  private storeName = "wallets";
+  private dbPromise: Promise<IDBDatabase> | null = null;
 
   constructor() {
+    // Initialize only in browser environment
     if (typeof window !== "undefined") {
       this.initializeDatabase();
     }
   }
 
-  private async initializeDatabase() {
-    if (this.isInitializing || isDbInitialized) return;
-    this.isInitializing = true;
+  private initializeDatabase(): Promise<IDBDatabase> {
+    if (this.dbPromise) return this.dbPromise;
 
-    try {
-      const initSqlJs = (await import("sql.js")).default;
-      this.SQL = await initSqlJs();
-
-      this.db = new this.SQL.Database();
-
-      this.createTables();
-
-      isDbInitialized = true;
-      console.log("SQL.js database initialization completed");
-
-      if (walletsCache.length > 0) {
-        this.migrateFromCache();
+    this.dbPromise = new Promise((resolve, reject) => {
+      if (typeof window === "undefined") {
+        reject(new Error("IndexedDB is not available in this environment"));
+        return;
       }
-    } catch (error) {
-      console.error("SQL.js database initialization error:", error);
-    } finally {
-      this.isInitializing = false;
+
+      try {
+        const request = indexedDB.open(this.dbName, 1);
+
+        request.onerror = (event) => {
+          console.error("IndexedDB error:", event);
+          reject(new Error("Failed to open IndexedDB"));
+        };
+
+        request.onsuccess = () => {
+          resolve(request.result);
+        };
+
+        request.onupgradeneeded = (event) => {
+          const db = (event.target as IDBOpenDBRequest).result;
+
+          // Create object store for wallets
+          if (!db.objectStoreNames.contains(this.storeName)) {
+            const store = db.createObjectStore(this.storeName, {
+              keyPath: "address",
+            });
+            store.createIndex("address", "address", { unique: true });
+          }
+        };
+      } catch (error) {
+        console.error("IndexedDB initialization error:", error);
+        reject(error);
+      }
+    });
+
+    return this.dbPromise;
+  }
+
+  async getAllWallets(): Promise<Wallet[]> {
+    // For server-side rendering, return the cache
+    if (typeof window === "undefined") {
+      return walletsCache;
     }
-  }
-
-  private createTables() {
-    if (!this.db) return;
-
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS wallets (
-        address TEXT PRIMARY KEY,
-        personalData TEXT NOT NULL
-      );
-    `);
-  }
-
-  private migrateFromCache() {
-    for (const wallet of walletsCache) {
-      this.upsertWallet(wallet);
-    }
-    walletsCache = [];
-  }
-
-  getAllWallets(): Wallet[] {
-    if (!this.db || !isDbInitialized) return walletsCache;
 
     try {
-      const result = this.db.exec("SELECT * FROM wallets");
-      if (result.length === 0) return [];
+      const db = await this.initializeDatabase();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(this.storeName, "readonly");
+        const store = transaction.objectStore(this.storeName);
+        const request = store.getAll();
 
-      return result[0].values.map((row: any[]) => ({
-        address: row[0] as string,
-        personalData: row[1] as string,
-      }));
+        request.onsuccess = () => {
+          resolve(request.result);
+        };
+
+        request.onerror = (event) => {
+          console.error("Error fetching wallets:", event);
+          reject(new Error("Failed to fetch wallets"));
+        };
+      });
     } catch (error) {
-      console.error("Wallet retrieval error:", error);
+      console.error("Error in getAllWallets:", error);
       return walletsCache;
     }
   }
 
-  getWalletByAddress(address: string): Wallet | null {
-    if (!this.db || !isDbInitialized) {
+  async getWalletByAddress(address: string): Promise<Wallet | null> {
+    // For server-side rendering, return from cache
+    if (typeof window === "undefined") {
       return walletsCache.find((wallet) => wallet.address === address) || null;
     }
 
     try {
-      const stmt = this.db.prepare(
-        "SELECT * FROM wallets WHERE address = :address"
-      );
-      stmt.bind({ ":address": address });
+      const db = await this.initializeDatabase();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(this.storeName, "readonly");
+        const store = transaction.objectStore(this.storeName);
+        const request = store.get(address);
 
-      if (!stmt.step()) {
-        stmt.free();
-        return null;
-      }
+        request.onsuccess = () => {
+          resolve(request.result || null);
+        };
 
-      const row = stmt.getAsObject();
-      stmt.free();
-
-      return {
-        address: row.address as string,
-        personalData: row.personalData as string,
-      };
+        request.onerror = (event) => {
+          console.error(`Error fetching wallet ${address}:`, event);
+          reject(new Error(`Failed to fetch wallet ${address}`));
+        };
+      });
     } catch (error) {
-      console.error(`Wallet retrieval error for address ${address}:`, error);
-      return null;
+      console.error(`Error in getWalletByAddress for ${address}:`, error);
+      return walletsCache.find((wallet) => wallet.address === address) || null;
     }
   }
 
-  upsertWallet(wallet: Wallet): Wallet {
-    if (!this.db || !isDbInitialized) {
-      const existingIndex = walletsCache.findIndex(
-        (w) => w.address === wallet.address
-      );
-      if (existingIndex >= 0) {
-        walletsCache[existingIndex] = wallet;
-      } else {
-        walletsCache.push(wallet);
-      }
+  async upsertWallet(wallet: Wallet): Promise<Wallet> {
+    // Always update the cache
+    const existingIndex = walletsCache.findIndex(
+      (w) => w.address === wallet.address
+    );
+    if (existingIndex >= 0) {
+      walletsCache[existingIndex] = wallet;
+    } else {
+      walletsCache.push(wallet);
+    }
+
+    // For server-side rendering, just update the cache
+    if (typeof window === "undefined") {
       return wallet;
     }
 
     try {
-      const stmt = this.db.prepare(
-        "INSERT OR REPLACE INTO wallets (address, personalData) VALUES (:address, :personalData)"
-      );
-      stmt.bind({
-        ":address": wallet.address,
-        ":personalData": wallet.personalData,
+      const db = await this.initializeDatabase();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(this.storeName, "readwrite");
+        const store = transaction.objectStore(this.storeName);
+        const request = store.put(wallet);
+
+        request.onsuccess = () => {
+          resolve(wallet);
+        };
+
+        request.onerror = (event) => {
+          console.error(`Error upserting wallet ${wallet.address}:`, event);
+          reject(new Error(`Failed to upsert wallet ${wallet.address}`));
+        };
       });
-
-      stmt.step();
-      stmt.free();
-
-      return wallet;
     } catch (error) {
-      console.error("Wallet upsert error:", error);
-      throw error;
+      console.error(`Error in upsertWallet for ${wallet.address}:`, error);
+      return wallet; // Return the wallet even if IndexedDB fails
     }
   }
 
-  deleteWallet(address: string): boolean {
-    if (!this.db || !isDbInitialized) {
-      const initialLength = walletsCache.length;
-      walletsCache = walletsCache.filter(
-        (wallet) => wallet.address !== address
-      );
+  async deleteWallet(address: string): Promise<boolean> {
+    // Always update the cache
+    const initialLength = walletsCache.length;
+    walletsCache = walletsCache.filter((wallet) => wallet.address !== address);
+
+    // For server-side rendering, just update the cache
+    if (typeof window === "undefined") {
       return walletsCache.length < initialLength;
     }
 
     try {
-      const stmt = this.db.prepare(
-        "DELETE FROM wallets WHERE address = :address"
-      );
-      stmt.bind({ ":address": address });
-      stmt.step();
-      stmt.free();
+      const db = await this.initializeDatabase();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(this.storeName, "readwrite");
+        const store = transaction.objectStore(this.storeName);
+        const request = store.delete(address);
 
-      return true;
-    } catch (error) {
-      console.error(`Wallet deletion error for address ${address}:`, error);
-      return false;
-    }
-  }
+        request.onsuccess = () => {
+          resolve(true);
+        };
 
-  exportDatabase(): Uint8Array | null {
-    if (!this.db) return null;
-    try {
-      return this.db.export();
+        request.onerror = (event) => {
+          console.error(`Error deleting wallet ${address}:`, event);
+          reject(new Error(`Failed to delete wallet ${address}`));
+        };
+      });
     } catch (error) {
-      console.error("Database export error:", error);
-      return null;
+      console.error(`Error in deleteWallet for ${address}:`, error);
+      return walletsCache.length < initialLength;
     }
   }
 }
