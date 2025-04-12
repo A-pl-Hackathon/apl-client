@@ -269,7 +269,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </span>
                   {tokenBalance !== "0" && (
                     <span className="text-orange-400 text-xs">
-                      {tokenBalance} MTK
+                      {tokenBalance} AGP
                     </span>
                   )}
                 </div>

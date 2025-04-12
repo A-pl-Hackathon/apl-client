@@ -129,6 +129,7 @@ export default function Chatbot() {
         "You are a helpful assistant for the A.pl Dashboard. Be concise and friendly in your responses. Explain in detail.",
     },
   ]);
+  const [lastUserPrompt, setLastUserPrompt] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -160,6 +161,16 @@ export default function Chatbot() {
   };
 
   const handleButtonClick = (action: "go" | "stay") => {
+    const userMessages = messages.filter((msg) => msg.sender === "user");
+    const lastUserMessage =
+      userMessages.length > 0 ? userMessages[userMessages.length - 1].text : "";
+
+    setLastUserPrompt(lastUserMessage);
+    console.log(
+      "[Chatbot] Stored last user message as prompt:",
+      lastUserMessage
+    );
+
     setMessages((prevMessages) =>
       prevMessages.map((msg) =>
         msg.showButtons ? { ...msg, showButtons: false } : msg
@@ -339,11 +350,7 @@ export default function Chatbot() {
         },
       ]);
 
-      const userMessages = messages.filter((msg) => msg.sender === "user");
-      const lastUserMessage =
-        userMessages.length > 0
-          ? userMessages[userMessages.length - 1].text
-          : "";
+      console.log("[Chatbot] Using stored prompt:", lastUserPrompt);
 
       const payload = {
         personalData: {
@@ -351,7 +358,7 @@ export default function Chatbot() {
           data: dataToSend,
         },
         agentModel: selectedModel,
-        prompt: lastUserMessage,
+        prompt: lastUserPrompt,
       };
 
       console.log("[Chatbot] Payload prepared:", JSON.stringify(payload));
@@ -423,7 +430,22 @@ export default function Chatbot() {
 
     setMessages((prevMessages) => [...prevMessages, loadingMessage]);
 
-    if (newMessage.toLowerCase().includes("hard")) {
+    const triggerWords = [
+      "hard",
+      "difficult",
+      "complicated",
+      "complex",
+      "challenging",
+      "advanced",
+      "surf",
+      "search",
+      "look up",
+    ];
+    const shouldShowButtons = triggerWords.some((word) =>
+      newMessage.toLowerCase().includes(word)
+    );
+
+    if (shouldShowButtons) {
       setMessages((prevMessages) =>
         prevMessages.filter((msg) => !msg.isLoading)
       );
@@ -657,6 +679,7 @@ export default function Chatbot() {
         onSubmit={handleAuthSubmit}
         selectedModel={selectedModel}
         walletAddress={walletAddress}
+        prompt={lastUserPrompt}
       />
     </div>
   );

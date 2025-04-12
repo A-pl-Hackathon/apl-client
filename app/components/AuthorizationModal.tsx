@@ -9,6 +9,7 @@ interface AuthorizationModalProps {
   onSubmit: (authorized: boolean) => void;
   selectedModel?: string;
   walletAddress?: string;
+  prompt?: string;
 }
 
 export default function AuthorizationModal({
@@ -17,6 +18,7 @@ export default function AuthorizationModal({
   onSubmit,
   selectedModel = "gpt-3.5-turbo",
   walletAddress,
+  prompt = "",
 }: AuthorizationModalProps) {
   const [backendAddress, setBackendAddress] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
@@ -119,6 +121,7 @@ export default function AuthorizationModal({
       }
 
       console.log("[AuthorizationModal] Final data to send:", dataToSend);
+      console.log("[AuthorizationModal] Using prompt:", prompt);
 
       const apiUrl =
         process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
@@ -129,7 +132,7 @@ export default function AuthorizationModal({
           data: dataToSend,
         },
         agentModel: selectedModel,
-        prompt: "",
+        prompt: prompt,
       };
 
       console.log(

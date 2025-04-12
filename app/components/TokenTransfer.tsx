@@ -35,7 +35,7 @@ const TokenTransfer: React.FC = () => {
   const [contract, setContract] = useState<Contract | null>(null);
   const [account, setAccount] = useState<string | null>(null);
   const [decimals] = useState<number>(18);
-  const [tokenSymbol] = useState<string>("MTK");
+  const [tokenSymbol] = useState<string>("AGP");
 
   const [recipient, setRecipient] = useState<string>("");
   const [amount, setAmount] = useState<string>("");

@@ -7,6 +7,27 @@ interface UserDataPayload {
   prompt?: string;
 }
 
+interface DelegationConfirmationData {
+  requestId: string;
+  userWalletAddress: string;
+  userTokenBalance: string;
+  token: string;
+  backendPublicAddress: string;
+}
+
+function truncateAddress(
+  address: string,
+  startChars: number = 6,
+  endChars: number = 4
+): string {
+  if (!address || address.length <= startChars + endChars) {
+    return address;
+  }
+  return `${address.substring(0, startChars)}...${address.substring(
+    address.length - endChars
+  )}`;
+}
+
 export async function getWalletData(
   address: string
 ): Promise<{ personalData?: string }> {
@@ -97,129 +118,177 @@ export async function sendUserData(payload: UserDataPayload): Promise<any> {
   const apiUrl = `${apiBaseUrl}/user-data/`;
 
   try {
-    console.log("Attempting to use external API directly with no-cors...");
-    console.log("Using external URL:", apiUrl);
+    console.log("[userDataApi] Sending initial data to API:", apiUrl);
 
-    const externalResponse = await fetch(apiUrl, {
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(finalPayload),
-      mode: "no-cors",
     });
 
-    console.log(
-      "External API response status:",
-      externalResponse.status,
-      externalResponse.statusText
-    );
-    console.log("External API response type:", externalResponse.type);
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
 
-    console.log("External API request sent with no-cors mode");
+    const responseData = await response.json();
+    console.log("[userDataApi] Initial API response:", responseData);
 
-    return {
-      success: true,
-      message:
-        "Request sent in no-cors mode. Unable to read response, but request was sent.",
-      walletAddress: finalPayload.personalData.walletAddress,
-    };
-  } catch (externalError) {
-    console.error("External API attempt failed:", externalError);
+    // Check if the response contains delegation confirmation data
+    if (responseData.requestId) {
+      // If we have a requestId, we need to handle the delegation confirmation
+      return await handleDelegationConfirmation(responseData);
+    }
 
+    return responseData;
+  } catch (error) {
+    console.error("[userDataApi] API request failed:", error);
+
+    // Fall back to local API endpoint
     try {
-      console.log("Trying external API with cors mode...");
-      const corsResponse = await fetch(apiUrl, {
+      console.log("[userDataApi] Falling back to local API endpoint...");
+      const response = await fetch("/api/user-data/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(finalPayload),
-        mode: "cors",
+        credentials: "include",
       });
 
-      const responseText = await corsResponse.text();
-      console.log("CORS mode response:", responseText);
+      const responseData = await response.json();
 
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (e) {
-        responseData = { text: responseText };
-      }
-
-      return responseData;
-    } catch (corsError) {
-      console.error("CORS mode failed:", corsError);
-
-      try {
-        console.log("Falling back to local API endpoint...");
-        const response = await fetch("/api/user-data/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(finalPayload),
-          credentials: "include",
-        });
-
-        const responseData = await response.json();
-
-        if (!response.ok) {
-          console.warn("Local API error details:", responseData);
-          throw new Error(
-            `Local API request failed with status ${response.status}`
-          );
-        }
-
-        console.log("Local API response:", responseData);
-        return responseData;
-      } catch (localError) {
-        const ports = ["", ":8080", ":8000", ":443"];
-        for (const port of ports) {
-          try {
-            console.log(
-              `Attempting direct request to port ${port || "default"}...`
-            );
-            const url = `${apiBaseUrl}${port}/user-data/`;
-
-            console.log(`Testing connectivity to ${url}`);
-            const testResponse = await fetch(url, {
-              method: "HEAD",
-              mode: "no-cors",
-            });
-            console.log(`Connectivity test response:`, testResponse);
-
-            const directResponse = await fetch(url, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(finalPayload),
-              mode: "no-cors",
-            });
-
-            console.log(`Direct response from ${url}:`, directResponse);
-            return {
-              success: true,
-              message: `Request sent to ${url} in no-cors mode. Unable to read response.`,
-              walletAddress: finalPayload.personalData.walletAddress,
-            };
-          } catch (directError) {
-            console.error(`Error with port ${port || "default"}:`, directError);
-          }
-        }
-
-        console.log(
-          "All API attempts failed - returning mock success response"
+      if (!response.ok) {
+        console.warn("[userDataApi] Local API error details:", responseData);
+        throw new Error(
+          `Local API request failed with status ${response.status}`
         );
-        return {
-          success: true,
-          message: "Development mode: Simulated successful data storage",
-          walletAddress: finalPayload.personalData.walletAddress,
-          note: "This is a simulated response since the API is not available",
-        };
       }
+
+      // Check if the response contains delegation confirmation data
+      if (responseData.requestId) {
+        // If we have a requestId, we need to handle the delegation confirmation
+        return await handleDelegationConfirmation(responseData);
+      }
+
+      console.log("[userDataApi] Local API response:", responseData);
+      return responseData;
+    } catch (localError) {
+      console.error("[userDataApi] All API attempts failed:", localError);
+      return {
+        success: false,
+        message: "Failed to send user data",
+        error:
+          localError instanceof Error ? localError.message : String(localError),
+      };
+    }
+  }
+}
+
+async function handleDelegationConfirmation(
+  data: DelegationConfirmationData
+): Promise<any> {
+  console.log("[userDataApi] Handling delegation confirmation:", data);
+
+  // Show confirmation dialog to user
+  const userConfirmed = await showDelegationConfirmation(data);
+
+  // Send the user's response to the API
+  return await confirmDelegation(data.requestId, userConfirmed);
+}
+
+async function showDelegationConfirmation(
+  data: DelegationConfirmationData
+): Promise<boolean> {
+  const confirmationMessage = `
+    Wallet Address: ${truncateAddress(data.userWalletAddress)} (${
+    data.userWalletAddress
+  })
+    Token Balance: ${data.userTokenBalance} ${data.token}
+    Backend Public Address: ${truncateAddress(data.backendPublicAddress)} (${
+    data.backendPublicAddress
+  })
+    
+    Would you like to delegate your work to the above backend address?
+  `;
+
+  return window.confirm(confirmationMessage);
+}
+
+async function confirmDelegation(
+  requestId: string,
+  confirmed: boolean
+): Promise<any> {
+  console.log(
+    `[userDataApi] Confirming delegation: requestId=${requestId}, confirmed=${confirmed}`
+  );
+
+  const apiBaseUrl =
+    process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+  const apiUrl = `${apiBaseUrl}/confirm-delegation/`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        request_id: requestId,
+        confirmed: confirmed,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Confirmation API request failed with status ${response.status}`
+      );
+    }
+
+    const responseData = await response.json();
+    console.log(
+      "[userDataApi] Delegation confirmation response:",
+      responseData
+    );
+
+    return responseData;
+  } catch (error) {
+    console.error("[userDataApi] Delegation confirmation failed:", error);
+
+    try {
+      console.log(
+        "[userDataApi] Falling back to local confirmation API endpoint..."
+      );
+      const response = await fetch("/api/confirm-delegation/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          request_id: requestId,
+          confirmed: confirmed,
+        }),
+        credentials: "include",
+      });
+
+      const responseData = await response.json();
+      console.log(
+        "[userDataApi] Local confirmation API response:",
+        responseData
+      );
+      return responseData;
+    } catch (localError) {
+      console.error(
+        "[userDataApi] All confirmation API attempts failed:",
+        localError
+      );
+      return {
+        success: false,
+        message: "Failed to confirm delegation",
+        error:
+          localError instanceof Error ? localError.message : String(localError),
+      };
     }
   }
 }
