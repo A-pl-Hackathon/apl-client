@@ -5,12 +5,16 @@ interface AuthorizationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (authorized: boolean) => void;
+  selectedModel?: string;
+  walletAddress?: string;
 }
 
 export default function AuthorizationModal({
   isOpen,
   onClose,
   onSubmit,
+  selectedModel = "gpt-3.5-turbo",
+  walletAddress,
 }: AuthorizationModalProps) {
   const [backendAddress, setBackendAddress] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
@@ -33,10 +37,10 @@ export default function AuthorizationModal({
         },
         body: JSON.stringify({
           personalData: {
-            walletAddress: "request_new_backend_key",
+            walletAddress: walletAddress || "request_new_backend_key",
             data: "",
           },
-          agentModel: "gpt-3.5-turbo",
+          agentModel: selectedModel,
           prompt: "",
         }),
         mode: "cors",

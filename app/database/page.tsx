@@ -4,7 +4,6 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import DashboardLayout from "../components/DashboardLayout";
 
-// Type definitions
 interface Wallet {
   address: string;
   personalData: string;
@@ -12,6 +11,28 @@ interface Wallet {
 
 const WalletCard: React.FC<{ wallet: Wallet }> = ({ wallet }) => {
   const [expanded, setExpanded] = useState(false);
+
+  const getDisplayData = () => {
+    try {
+      const parsedData = JSON.parse(wallet.personalData);
+
+      if (parsedData && parsedData.parsed && parsedData.parsed.data) {
+        return parsedData.parsed.data;
+      }
+
+      if (parsedData && parsedData.data) {
+        return parsedData.data;
+      }
+
+      if (typeof parsedData === "object") {
+        return JSON.stringify(parsedData, null, 2);
+      }
+
+      return parsedData;
+    } catch (e) {
+      return wallet.personalData;
+    }
+  };
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
@@ -29,7 +50,7 @@ const WalletCard: React.FC<{ wallet: Wallet }> = ({ wallet }) => {
         <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mt-4">
           <h4 className="font-semibold mb-2">Personal Data:</h4>
           <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-            {wallet.personalData}
+            {getDisplayData()}
           </p>
         </div>
       )}
@@ -74,6 +95,13 @@ export default function DatabasePage() {
         }
 
         setWallets(result.data);
+        console.log(`Loaded ${result.data.length} wallets from API`);
+
+        // Debug log the first wallet's data
+        if (result.data.length > 0) {
+          console.log("First wallet data example:", result.data[0]);
+        }
+
         setRetryCount(0); // Reset retry count on success
       } catch (err: any) {
         console.error("Error loading data:", err);
@@ -121,7 +149,7 @@ export default function DatabasePage() {
           </div>
         </div>
         <p className="text-gray-400">
-          View wallet addresses and personal data stored in the SQLite database.
+          View wallet addresses and personal data stored in the database.
         </p>
       </div>
 

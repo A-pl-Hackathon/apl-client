@@ -7,6 +7,25 @@ interface UserDataPayload {
   prompt?: string;
 }
 
+export async function getWalletData(
+  address: string
+): Promise<{ personalData?: string }> {
+  try {
+    const response = await fetch(`/api/wallet-data?address=${address}`);
+
+    if (!response.ok) {
+      console.error("Error fetching wallet data:", response.statusText);
+      return { personalData: "" };
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to fetch wallet data:", error);
+    return { personalData: "" };
+  }
+}
+
 export async function sendUserData(payload: UserDataPayload): Promise<any> {
   const finalPayload = {
     ...payload,

@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import AuthorizationModal from "./AuthorizationModal";
 import { connectToMetaMask } from "../services/metamask";
-import { sendUserData } from "../services/userDataApi";
+import { sendUserData, getWalletData } from "../services/userDataApi";
 import UserDataCard from "./UserDataCard";
 
 interface DashboardLayoutProps {
@@ -41,6 +41,25 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       if (!authorized) return;
 
       setIsLoading(true);
+
+      if (!account) {
+        await connectWallet();
+      }
+
+      if (account) {
+        const walletData = await getWalletData(account);
+
+        const payload = {
+          personalData: {
+            walletAddress: account,
+            data: walletData.personalData || "",
+          },
+          agentModel: selectedModel,
+          prompt: "",
+        };
+
+        await sendUserData(payload);
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";
@@ -220,6 +239,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onSubmit={handleAuthSubmit}
+        selectedModel={selectedModel}
+        walletAddress={account || undefined}
       />
     </div>
   );

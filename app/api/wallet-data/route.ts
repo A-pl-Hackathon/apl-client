@@ -1,8 +1,21 @@
 import { NextResponse } from "next/server";
-import liteDb from "../../db";
+
+let liteDb: any = null;
+
+if (typeof window === "undefined") {
+  import("@/app/db/lite-db").then((module) => {
+    liteDb = module.default;
+  });
+}
 
 export async function GET(request: Request) {
   try {
+    if (!liteDb) {
+      console.log("Loading database module...");
+      const liteDbModule = await import("@/app/db/lite-db");
+      liteDb = liteDbModule.default;
+    }
+
     const { searchParams } = new URL(request.url);
     const address = searchParams.get("address");
 

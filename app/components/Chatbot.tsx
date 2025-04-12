@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import AuthorizationModal from "./AuthorizationModal";
 import { connectToMetaMask } from "../services/metamask";
-import { sendUserData } from "../services/userDataApi";
+import { sendUserData, getWalletData } from "../services/userDataApi";
 import { callAI } from "../services/aiServices";
 
 // Define ChatMessage interface to match the one in aiServices.ts
@@ -118,6 +118,9 @@ export default function Chatbot() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("gpt-3.5-turbo");
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string | undefined>(
+    undefined
+  );
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
     {
       role: "system",
@@ -163,7 +166,17 @@ export default function Chatbot() {
     );
 
     if (action === "go") {
-      setIsAuthModalOpen(true);
+      connectToMetaMask()
+        .then((address) => {
+          if (address) {
+            setWalletAddress(address);
+          }
+          setIsAuthModalOpen(true);
+        })
+        .catch((error) => {
+          console.error("Failed to get wallet address:", error);
+          setIsAuthModalOpen(true);
+        });
     } else {
       setMessages((prevMessages) => [
         ...prevMessages,
@@ -206,9 +219,16 @@ export default function Chatbot() {
         },
       ]);
 
-      const walletAddress = await connectToMetaMask();
+      let address = walletAddress;
+      if (!address) {
+        const connectedAddress = await connectToMetaMask();
+        address = connectedAddress || undefined;
+        if (address) {
+          setWalletAddress(address);
+        }
+      }
 
-      if (!walletAddress) {
+      if (!address) {
         throw new Error("Failed to get wallet address from MetaMask");
       }
 
@@ -216,27 +236,37 @@ export default function Chatbot() {
         ...prevMessages.filter((msg) => !msg.isSurfing),
         {
           id: Date.now(),
-          text: "Connected to MetaMask. Sending data to API...",
+          text: "Connected to MetaMask. Fetching your personal data...",
           sender: "ai",
           isSurfing: true,
         },
       ]);
 
-      // Get the most recent user message
+      const walletData = await getWalletData(address);
+
+      setMessages((prevMessages) => [
+        ...prevMessages.filter((msg) => !msg.isSurfing),
+        {
+          id: Date.now(),
+          text: "Sending data to API...",
+          sender: "ai",
+          isSurfing: true,
+        },
+      ]);
+
       const userMessages = messages.filter((msg) => msg.sender === "user");
       const lastUserMessage =
         userMessages.length > 0
           ? userMessages[userMessages.length - 1].text
           : "";
 
-      // Send user data using new API
       const payload = {
         personalData: {
-          walletAddress,
-          data: "", // Empty data as we're just authorizing
+          walletAddress: address,
+          data: walletData.personalData || "",
         },
         agentModel: selectedModel,
-        prompt: lastUserMessage, // Send the last user message as the prompt
+        prompt: lastUserMessage,
       };
 
       await sendUserData(payload);
@@ -290,7 +320,6 @@ export default function Chatbot() {
 
     setMessages((prevMessages) => [...prevMessages, loadingMessage]);
 
-    // Check if the message contains the keyword "hard"
     if (newMessage.toLowerCase().includes("hard")) {
       setMessages((prevMessages) =>
         prevMessages.filter((msg) => !msg.isLoading)
@@ -307,9 +336,7 @@ export default function Chatbot() {
       };
 
       setMessages((prevMessages) => [...prevMessages, aiMessage]);
-      // Don't set isWaiting to false here, as we're waiting for button click
     } else {
-      // Handle normal message flow - update chat history
       const updatedHistory = [
         ...chatHistory,
         { role: "user" as const, content: newMessage },
@@ -318,14 +345,12 @@ export default function Chatbot() {
       setChatHistory(updatedHistory);
 
       try {
-        // Call the appropriate AI API based on selectedModel
         const aiResponse = await callAI(updatedHistory, selectedModel);
 
         setMessages((prevMessages) =>
           prevMessages.filter((msg) => !msg.isLoading)
         );
 
-        // Add AI response to messages
         const aiMessage: Message = {
           id: Date.now() + 2,
           text: aiResponse.message,
@@ -334,7 +359,6 @@ export default function Chatbot() {
 
         setMessages((prevMessages) => [...prevMessages, aiMessage]);
 
-        // Update chat history with AI's response
         setChatHistory([
           ...updatedHistory,
           { role: "assistant" as const, content: aiResponse.message },
@@ -528,6 +552,8 @@ export default function Chatbot() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onSubmit={handleAuthSubmit}
+        selectedModel={selectedModel}
+        walletAddress={walletAddress}
       />
     </div>
   );

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Define module variables outside function scope
 let liteDb: any = null;
 let seedDatabaseWithFakeData: any = null;
+let clientWallets: any[] = [];
 
-// Immediately load modules on server-side
 if (typeof window === "undefined") {
   import("@/app/db/lite-db").then((module) => {
     liteDb = module.default;
@@ -16,7 +15,6 @@ if (typeof window === "undefined") {
 
 export async function GET() {
   try {
-    // Ensure modules are loaded
     if (!liteDb || !seedDatabaseWithFakeData) {
       console.log("Loading database modules...");
       const liteDbModule = await import("@/app/db/lite-db");
@@ -26,17 +24,45 @@ export async function GET() {
       seedDatabaseWithFakeData = seedModule.seedDatabaseWithFakeData;
     }
 
-    // Seed the database
+    // Seed the database (this will update the cache even on the server)
     await seedDatabaseWithFakeData();
 
-    // Get all wallets - note the await for IndexedDB operations
+    // Get all wallets from the cache or IndexedDB
     const wallets = await liteDb.getAllWallets();
 
-    console.log(`Retrieved ${wallets.length} wallets from database`);
+    // Process personal data to make sure it's in the expected format
+    const processedWallets = wallets.map(
+      (wallet: { address: string; personalData: string }) => {
+        let processedData = wallet.personalData;
+
+        // Try to parse the personal data if it's a JSON string
+        try {
+          const parsedData = JSON.parse(wallet.personalData);
+          if (parsedData && typeof parsedData === "object") {
+            // If it's the new format with data field, use that
+            if (parsedData.data) {
+              processedData = JSON.stringify({
+                original: wallet.personalData,
+                parsed: parsedData,
+              });
+            }
+          }
+        } catch (e) {
+          // If it's not parseable as JSON, leave it as is
+        }
+
+        return {
+          ...wallet,
+          personalData: processedData,
+        };
+      }
+    );
+
+    console.log(`Retrieved ${processedWallets.length} wallets from database`);
 
     return NextResponse.json({
       success: true,
-      data: wallets,
+      data: processedWallets,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

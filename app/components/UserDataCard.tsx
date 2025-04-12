@@ -57,15 +57,59 @@ export default function UserDataCard({
 
   useEffect(() => {
     const fetchWalletData = async () => {
-      if (walletAddress) {
+      if (walletAddress && typeof window !== "undefined") {
         try {
+          console.log("Fetching wallet data for:", walletAddress);
           const walletData = await liteDb.getWalletByAddress(walletAddress);
+          console.log("Retrieved wallet data:", walletData);
+
           if (walletData && walletData.personalData) {
-            setPersonalData(walletData.personalData);
+            // Try to parse personalData if it's a JSON string
+            try {
+              const parsedData = JSON.parse(walletData.personalData);
+              if (parsedData.data) {
+                console.log("Setting parsed personal data:", parsedData.data);
+                setPersonalData(parsedData.data);
+              } else {
+                console.log(
+                  "Setting personal data directly:",
+                  walletData.personalData
+                );
+                setPersonalData(walletData.personalData);
+              }
+            } catch (e) {
+              // If it's not a valid JSON, use it directly
+              console.log(
+                "Setting personal data directly:",
+                walletData.personalData
+              );
+              setPersonalData(walletData.personalData);
+            }
+          } else {
+            console.log(
+              "No saved data found for wallet, clearing personal data"
+            );
+            setPersonalData("");
+
+            // Create a new wallet entry if none exists
+            const newWallet: Wallet = {
+              address: walletAddress,
+              personalData: "",
+            };
+            console.log("Creating new wallet entry:", newWallet);
+            await liteDb.upsertWallet(newWallet);
           }
+
+          // Debug: List all wallets in database
+          const allWallets = await liteDb.getAllWallets();
+          console.log(`Total wallets in database: ${allWallets.length}`);
+          console.log("All wallets:", allWallets);
         } catch (error) {
           console.error("Error fetching wallet data:", error);
         }
+      } else {
+        console.log("No wallet address provided, clearing personal data");
+        setPersonalData("");
       }
     };
 
@@ -79,11 +123,53 @@ export default function UserDataCard({
     setSubmitError("");
 
     try {
-      if (walletAddress) {
-        await liteDb.upsertWallet({
-          address: walletAddress,
-          personalData: personalData,
-        });
+      if (!walletAddress) {
+        throw new Error("Wallet address is required");
+      }
+
+      const personalDataObj = {
+        walletAddress,
+        data: personalData,
+      };
+
+      const wallet: Wallet = {
+        address: walletAddress,
+        personalData: JSON.stringify(personalDataObj),
+      };
+
+      console.log("Saving wallet to database:", wallet);
+
+      if (typeof window !== "undefined") {
+        await liteDb.upsertWallet(wallet);
+
+        const savedWallet = await liteDb.getWalletByAddress(walletAddress);
+        console.log("Wallet data after save:", savedWallet);
+
+        try {
+          const apiResponse = await fetch(`/api/database`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              address: walletAddress,
+              personalData: JSON.stringify(personalDataObj),
+            }),
+          });
+
+          if (apiResponse.ok) {
+            console.log("Successfully updated wallet via API route");
+          } else {
+            console.warn(
+              "API route update failed, but IndexedDB update succeeded"
+            );
+          }
+        } catch (apiError) {
+          console.warn(
+            "API route update failed, but IndexedDB update succeeded:",
+            apiError
+          );
+        }
       }
 
       const payload = {
@@ -92,11 +178,22 @@ export default function UserDataCard({
           data: personalData,
         },
         agentModel: selectedModel,
+        prompt: "",
       };
 
+      console.log("Sending data to API:", payload);
       await sendUserData(payload);
       setSubmitSuccess(true);
+
+      // Verify all wallets in database after update
+      if (typeof window !== "undefined") {
+        const allWallets = await liteDb.getAllWallets();
+        console.log(
+          `Total wallets in database after update: ${allWallets.length}`
+        );
+      }
     } catch (error) {
+      console.error("Error in handleSubmit:", error);
       setSubmitError(
         error instanceof Error ? error.message : "An unknown error occurred"
       );
