@@ -34,8 +34,8 @@ const TokenTransfer: React.FC = () => {
   const [signer, setSigner] = useState<any>(null);
   const [contract, setContract] = useState<Contract | null>(null);
   const [account, setAccount] = useState<string | null>(null);
-  const [decimals] = useState<number>(18);
-  const [tokenSymbol] = useState<string>("AGP");
+  const [decimals, setDecimals] = useState<number>(18);
+  const [tokenSymbol, setTokenSymbol] = useState<string>("AGP");
 
   const [recipient, setRecipient] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -49,6 +49,8 @@ const TokenTransfer: React.FC = () => {
   const [error, setError] = useState<string>("");
 
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "";
+  const sepoliaContractAddress =
+    process.env.NEXT_PUBLIC_SEPOLIA_CONTRACT_ADDRESS || "";
   const backendUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
@@ -64,6 +66,7 @@ const TokenTransfer: React.FC = () => {
         const currentAccount = await web3Signer.getAddress();
 
         const { chainId } = await web3Provider.getNetwork();
+        console.log("Connected to chain ID:", Number(chainId));
 
         if (Number(chainId) !== 11155111) {
           setError("Please connect to the Sepolia Test Network in MetaMask.");
@@ -74,17 +77,31 @@ const TokenTransfer: React.FC = () => {
         setSigner(web3Signer);
         setAccount(currentAccount);
 
-        const tokenContract = new Contract(
-          contractAddress,
-          tokenABI,
-          web3Signer
+        const addressToUse = sepoliaContractAddress || contractAddress;
+        console.log("Using contract address:", addressToUse);
+        console.log("NEXT_PUBLIC_CONTRACT_ADDRESS:", contractAddress);
+        console.log(
+          "NEXT_PUBLIC_SEPOLIA_CONTRACT_ADDRESS:",
+          sepoliaContractAddress
         );
+
+        const tokenContract = new Contract(addressToUse, tokenABI, web3Signer);
         setContract(tokenContract);
 
+        try {
+          const symbol = await tokenContract.symbol();
+          console.log("Token symbol:", symbol);
+          setTokenSymbol(symbol);
+
+          const tokenDecimals = await tokenContract.decimals();
+          console.log("Token decimals:", tokenDecimals);
+          setDecimals(tokenDecimals);
+        } catch (tokenError) {
+          console.error("Error getting token info:", tokenError);
+        }
+
         console.log("Wallet connected:", currentAccount);
-        console.log("Contract loaded at:", contractAddress);
-        console.log("Using hardcoded token decimals:", decimals);
-        console.log("Using hardcoded token symbol:", tokenSymbol);
+        console.log("Contract loaded at:", addressToUse);
       } catch (err: any) {
         console.error("Wallet connection failed:", err);
         setError(err.message || "Failed to connect wallet.");
@@ -108,12 +125,30 @@ const TokenTransfer: React.FC = () => {
             setAccount(newAddress);
             setSigner(web3Signer);
 
+            const addressToUse = sepoliaContractAddress || contractAddress;
+            console.log(
+              "Using contract address after account change:",
+              addressToUse
+            );
+
             const tokenContract = new Contract(
-              contractAddress,
+              addressToUse,
               tokenABI,
               web3Signer
             );
             setContract(tokenContract);
+
+            try {
+              const symbol = await tokenContract.symbol();
+              console.log("Token symbol after account change:", symbol);
+              setTokenSymbol(symbol);
+            } catch (symbolError) {
+              console.error(
+                "Error getting token symbol after account change:",
+                symbolError
+              );
+            }
+
             console.log(
               "Re-initialized provider, signer, and contract for new account."
             );
@@ -176,8 +211,12 @@ const TokenTransfer: React.FC = () => {
     });
 
     try {
-      const amountToSend = parseUnits(amount, decimals);
-      console.log(`Sending ${amount} ${tokenSymbol} tokens to ${recipient}`);
+      const cleanAmount = stripCommas(amount);
+      const amountToSend = parseUnits(cleanAmount, decimals);
+      console.log(
+        `Sending ${cleanAmount} ${tokenSymbol} tokens to ${recipient}`
+      );
+      console.log(`Amount in smallest unit: ${amountToSend}`);
 
       const tx = await contract.transfer(recipient, amountToSend);
       setTransaction({
@@ -207,8 +246,44 @@ const TokenTransfer: React.FC = () => {
     if (!contract || !account) return "0";
 
     try {
+      try {
+        const tokenDecimals = await contract.decimals();
+        console.log("Token decimals:", tokenDecimals);
+        setDecimals(tokenDecimals);
+      } catch (decimalError) {
+        console.error(
+          "Error getting decimals, using default 18:",
+          decimalError
+        );
+      }
+
       const balance = await contract.balanceOf(account);
-      return formatUnits(balance, decimals);
+      console.log("Raw balance:", balance.toString());
+
+      let divisor = BigInt(1);
+      for (let i = 0; i < decimals; i++) {
+        divisor *= BigInt(10);
+      }
+
+      const whole = balance / divisor;
+      const fraction = balance % divisor;
+
+      let formattedWhole = whole
+        .toString()
+        .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      let formatted = formattedWhole;
+
+      if (fraction > 0) {
+        let fractionStr = fraction.toString().padStart(decimals, "0");
+        fractionStr = fractionStr.replace(/0+$/, "");
+
+        if (fractionStr.length > 0) {
+          formatted += "." + fractionStr;
+        }
+      }
+
+      console.log("Formatted balance:", formatted);
+      return formatted;
     } catch (error) {
       console.error("Failed to get token balance:", error);
       return "0";
@@ -240,6 +315,20 @@ const TokenTransfer: React.FC = () => {
       refreshBalance();
     }
   }, [contract, account]);
+
+  const formatNumberWithCommas = (value: string): string => {
+    const withoutCommas = value.replace(/,/g, "");
+
+    const parts = withoutCommas.split(".");
+
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+    return parts.length > 1 ? parts.join(".") : parts[0];
+  };
+
+  const stripCommas = (value: string): string => {
+    return value.replace(/,/g, "");
+  };
 
   return (
     <div className="w-full max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
@@ -292,7 +381,19 @@ const TokenTransfer: React.FC = () => {
                 type="text"
                 placeholder={`Amount (e.g., 1.23)`}
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  const withoutCommas = value.replace(/,/g, "");
+                  const isValidInput =
+                    /^(\d+)?\.?(\d+)?$/.test(withoutCommas) ||
+                    withoutCommas === "";
+
+                  if (isValidInput) {
+                    const formattedValue =
+                      formatNumberWithCommas(withoutCommas);
+                    setAmount(formattedValue);
+                  }
+                }}
                 disabled={loading}
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />

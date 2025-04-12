@@ -21,8 +21,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isLogoLoading, setIsLogoLoading] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState("gpt-3.5-turbo");
-  const { account, connecting, connectWallet, disconnectWallet, tokenBalance } =
-    useWallet();
+  const {
+    account,
+    connecting,
+    connectWallet,
+    disconnectWallet,
+    tokenBalance,
+    tokenSymbol,
+  } = useWallet();
 
   const toggleChatbot = () => {
     setChatbotVisible(!chatbotVisible);
@@ -269,7 +275,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </span>
                   {tokenBalance !== "0" && (
                     <span className="text-orange-400 text-xs">
-                      {tokenBalance} AGP
+                      {tokenBalance} {tokenSymbol || "AGP"}
                     </span>
                   )}
                 </div>

@@ -14,6 +14,7 @@ interface WalletContextType {
   account: string | null;
   connecting: boolean;
   tokenBalance: string;
+  tokenSymbol: string;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   isConnected: boolean;
@@ -39,9 +40,12 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const [signer, setSigner] = useState<any>(null);
   const [contract, setContract] = useState<Contract | null>(null);
   const [tokenBalance, setTokenBalance] = useState<string>("0");
+  const [tokenSymbol, setTokenSymbol] = useState<string>("AGP");
   const [connecting, setConnecting] = useState<boolean>(false);
 
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "";
+  const sepoliaContractAddress =
+    process.env.NEXT_PUBLIC_SEPOLIA_CONTRACT_ADDRESS || "";
 
   const connectWallet = async () => {
     if (typeof window === "undefined" || !window.ethereum) {
@@ -58,6 +62,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       const currentAccount = await web3Signer.getAddress();
 
       const { chainId } = await web3Provider.getNetwork();
+      console.log("Connected to chain ID:", Number(chainId));
+
       if (Number(chainId) !== 11155111) {
         alert("Please connect to the Sepolia Test Network in MetaMask.");
         setConnecting(false);
@@ -68,8 +74,25 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       setSigner(web3Signer);
       setAccount(currentAccount);
 
-      const tokenContract = new Contract(contractAddress, tokenABI, web3Signer);
+      const addressToUse = sepoliaContractAddress || contractAddress;
+      console.log("Using contract address:", addressToUse);
+      console.log("NEXT_PUBLIC_CONTRACT_ADDRESS:", contractAddress);
+      console.log(
+        "NEXT_PUBLIC_SEPOLIA_CONTRACT_ADDRESS:",
+        sepoliaContractAddress
+      );
+
+      const tokenContract = new Contract(addressToUse, tokenABI, web3Signer);
       setContract(tokenContract);
+
+      try {
+        const symbol = await tokenContract.symbol();
+        console.log("Token symbol retrieved from contract:", symbol);
+        setTokenSymbol(symbol);
+      } catch (error) {
+        console.error("Error fetching token symbol:", error);
+        setTokenSymbol("AGP");
+      }
 
       console.log("Wallet connected:", currentAccount);
     } catch (error) {
@@ -102,12 +125,32 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
             const web3Signer = await web3Provider.getSigner();
             setSigner(web3Signer);
 
+            const addressToUse = sepoliaContractAddress || contractAddress;
+            console.log(
+              "Using contract address after account change:",
+              addressToUse
+            );
+
             const tokenContract = new Contract(
-              contractAddress,
+              addressToUse,
               tokenABI,
               web3Signer
             );
             setContract(tokenContract);
+
+            try {
+              const symbol = await tokenContract.symbol();
+              console.log(
+                "Token symbol retrieved after account change:",
+                symbol
+              );
+              setTokenSymbol(symbol);
+            } catch (error) {
+              console.error(
+                "Error fetching token symbol after account change:",
+                error
+              );
+            }
           } catch (error) {
             console.error("Error updating account:", error);
             disconnectWallet();
@@ -134,16 +177,53 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         window.ethereum.removeListener("chainChanged", handleChainChanged);
       }
     };
-  }, [account, contractAddress]);
+  }, [account, contractAddress, sepoliaContractAddress]);
 
   useEffect(() => {
     const getTokenBalance = async () => {
       if (!contract || !account) return;
 
       try {
+        console.log("Retrieving token balance for account:", account);
+
+        let decimals = 18;
+        try {
+          decimals = await contract.decimals();
+          console.log("Token decimals:", decimals);
+        } catch (error) {
+          console.error(
+            "Error getting token decimals, using default 18:",
+            error
+          );
+        }
+
         const balance = await contract.balanceOf(account);
-        const formattedBalance = balance / BigInt(10 ** 18);
-        setTokenBalance(formattedBalance.toString());
+        console.log("Raw balance from contract:", balance.toString());
+
+        let divisor = BigInt(1);
+        for (let i = 0; i < decimals; i++) {
+          divisor *= BigInt(10);
+        }
+
+        const whole = balance / divisor;
+        const fraction = balance % divisor;
+
+        let formattedWhole = whole
+          .toString()
+          .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        let formattedBalance = formattedWhole;
+
+        if (fraction > 0) {
+          let fractionStr = fraction.toString().padStart(decimals, "0");
+          fractionStr = fractionStr.replace(/0+$/, "");
+
+          if (fractionStr.length > 0) {
+            formattedBalance += "." + fractionStr;
+          }
+        }
+
+        console.log("Formatted balance:", formattedBalance);
+        setTokenBalance(formattedBalance);
       } catch (error) {
         console.error("Failed to get token balance:", error);
       }
@@ -158,6 +238,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     account,
     connecting,
     tokenBalance,
+    tokenSymbol,
     connectWallet,
     disconnectWallet,
     isConnected: !!account,
