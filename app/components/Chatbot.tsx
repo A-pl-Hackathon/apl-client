@@ -4,6 +4,13 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import AuthorizationModal from "./AuthorizationModal";
 import { connectToMetaMask } from "../services/metamask";
 import { sendUserData } from "../services/userDataApi";
+import { callAI } from "../services/aiServices";
+
+// Define ChatMessage interface to match the one in aiServices.ts
+interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
 
 interface Message {
   id: number;
@@ -111,6 +118,13 @@ export default function Chatbot() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("gpt-3.5-turbo");
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
+    {
+      role: "system",
+      content:
+        "You are a helpful assistant for the A.pl Dashboard. Be concise and friendly in your responses. Explain in detail.",
+    },
+  ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -208,6 +222,13 @@ export default function Chatbot() {
         },
       ]);
 
+      // Get the most recent user message
+      const userMessages = messages.filter((msg) => msg.sender === "user");
+      const lastUserMessage =
+        userMessages.length > 0
+          ? userMessages[userMessages.length - 1].text
+          : "";
+
       // Send user data using new API
       const payload = {
         personalData: {
@@ -215,6 +236,7 @@ export default function Chatbot() {
           data: "", // Empty data as we're just authorizing
         },
         agentModel: selectedModel,
+        prompt: lastUserMessage, // Send the last user message as the prompt
       };
 
       await sendUserData(payload);
@@ -245,7 +267,7 @@ export default function Chatbot() {
     }
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newMessage.trim() === "" || isWaiting) return;
 
@@ -268,47 +290,76 @@ export default function Chatbot() {
 
     setMessages((prevMessages) => [...prevMessages, loadingMessage]);
 
-    setTimeout(() => {
+    // Check if the message contains the keyword "hard"
+    if (newMessage.toLowerCase().includes("hard")) {
       setMessages((prevMessages) =>
         prevMessages.filter((msg) => !msg.isLoading)
       );
 
-      let response =
-        "I've processed your request and found some information that might help.";
-      let showButtons = false;
-
-      if (
-        newMessage.toLowerCase().includes("hello") ||
-        newMessage.toLowerCase().includes("hi")
-      ) {
-        response = "Hello there! How can I assist you today?";
-      } else if (newMessage.toLowerCase().includes("help")) {
-        response =
-          "I'm here to help! You can ask me about your data, manage your account, or get insights about your interactions.";
-      } else if (
-        newMessage.toLowerCase().includes("data") ||
-        newMessage.toLowerCase().includes("stats")
-      ) {
-        response =
-          "Your current stats: 24 comments, 105 likes on your posts. Would you like more detailed analytics?";
-      } else if (newMessage.toLowerCase().includes("hard")) {
-        response =
-          "It's over my scope. May I surf A.pl and get some trustworthy informations?";
-        showButtons = true;
-      }
+      const response =
+        "It's over my scope. May I surf A.pl and get some trustworthy informations?";
 
       const aiMessage: Message = {
         id: Date.now() + 2,
         text: response,
         sender: "ai",
-        showButtons,
+        showButtons: true,
       };
 
       setMessages((prevMessages) => [...prevMessages, aiMessage]);
-      if (!showButtons) {
+      // Don't set isWaiting to false here, as we're waiting for button click
+    } else {
+      // Handle normal message flow - update chat history
+      const updatedHistory = [
+        ...chatHistory,
+        { role: "user" as const, content: newMessage },
+      ];
+
+      setChatHistory(updatedHistory);
+
+      try {
+        // Call the appropriate AI API based on selectedModel
+        const aiResponse = await callAI(updatedHistory, selectedModel);
+
+        setMessages((prevMessages) =>
+          prevMessages.filter((msg) => !msg.isLoading)
+        );
+
+        // Add AI response to messages
+        const aiMessage: Message = {
+          id: Date.now() + 2,
+          text: aiResponse.message,
+          sender: "ai",
+        };
+
+        setMessages((prevMessages) => [...prevMessages, aiMessage]);
+
+        // Update chat history with AI's response
+        setChatHistory([
+          ...updatedHistory,
+          { role: "assistant" as const, content: aiResponse.message },
+        ]);
+      } catch (error) {
+        console.error("Error getting AI response:", error);
+
+        setMessages((prevMessages) =>
+          prevMessages.filter((msg) => !msg.isLoading)
+        );
+
+        const errorMessage =
+          error instanceof Error ? error.message : "An unknown error occurred";
+
+        const aiMessage: Message = {
+          id: Date.now() + 2,
+          text: `Sorry, I encountered an error: ${errorMessage}`,
+          sender: "ai",
+        };
+
+        setMessages((prevMessages) => [...prevMessages, aiMessage]);
+      } finally {
         setIsWaiting(false);
       }
-    }, 2000);
+    }
   };
 
   const handleTypingComplete = useCallback((messageId: number) => {
