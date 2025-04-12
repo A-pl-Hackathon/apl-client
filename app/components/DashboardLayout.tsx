@@ -10,6 +10,7 @@ import { connectToMetaMask } from "../services/metamask";
 import { sendUserData, getWalletData } from "../services/userDataApi";
 import UserDataCard from "./UserDataCard";
 import { liteDb } from "../db";
+import NetworkToggle from "./NetworkToggle";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -28,6 +29,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     disconnectWallet,
     tokenBalance,
     tokenSymbol,
+    selectedNetwork,
+    toggleNetwork,
   } = useWallet();
 
   const toggleChatbot = () => {
@@ -76,7 +79,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         "[DashboardLayout] Fetching wallet data from API for:",
         walletAddress
       );
-      const apiWalletData = await getWalletData(walletAddress);
+      console.log("[DashboardLayout] Using network:", selectedNetwork);
+      const apiWalletData = await getWalletData(walletAddress, selectedNetwork);
       console.log(
         "[DashboardLayout] Retrieved wallet data from API:",
         JSON.stringify(apiWalletData)
@@ -159,6 +163,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         },
         agentModel: selectedModel,
         prompt: "",
+        network: selectedNetwork,
       };
 
       console.log(
@@ -177,6 +182,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         "[DashboardLayout] Data type:",
         typeof payload.personalData.data
       );
+      console.log("[DashboardLayout] Using network:", payload.network);
 
       const response = await sendUserData(payload);
       console.log("[DashboardLayout] API response:", JSON.stringify(response));
@@ -246,29 +252,45 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </Link>
             <button
               onClick={handleGoClick}
-              disabled={isLoading}
-              className={`px-4 py-1.5 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                isLoading ? "animate-pulse" : ""
+              className={`px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors ${
+                isLoading ? "opacity-70 cursor-not-allowed" : ""
               }`}
+              disabled={isLoading}
             >
-              {isLoading ? "Sending..." : "Go!"}
+              {isLoading ? (
+                <span className="flex items-center">
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Processing
+                </span>
+              ) : (
+                "Go"
+              )}
             </button>
 
-            {!account ? (
-              <button
-                onClick={connectWallet}
-                disabled={connecting}
-                className="flex items-center space-x-1 px-3 py-1.5 bg-orange-500 text-white rounded-full font-semibold hover:bg-orange-600 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <img
-                  src="/metamask-fox.svg"
-                  alt="MetaMask"
-                  className="w-4 h-4"
-                />
-                <span>{connecting ? "Connecting..." : "Connect Wallet"}</span>
-              </button>
-            ) : (
-              <div className="flex items-center space-x-2">
+            {/* Network Toggle */}
+            <NetworkToggle />
+
+            {account ? (
+              <div className="flex items-center space-x-3">
                 <div className="flex flex-col items-end">
                   <span className="text-white text-xs">
                     {formatAccount(account)}
@@ -281,11 +303,24 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </div>
                 <button
                   onClick={disconnectWallet}
-                  className="text-xs px-2 py-1 bg-gray-700 text-white rounded hover:bg-gray-600"
+                  className="text-red-400 hover:text-red-300 transition-colors"
                 >
                   Disconnect
                 </button>
               </div>
+            ) : (
+              <button
+                onClick={connectWallet}
+                disabled={connecting}
+                className="flex items-center space-x-1 px-3 py-1.5 bg-orange-500 text-white rounded-full font-semibold hover:bg-orange-600 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <img
+                  src="/metamask-fox.svg"
+                  alt="MetaMask"
+                  className="w-4 h-4"
+                />
+                <span>{connecting ? "Connecting..." : "Connect Wallet"}</span>
+              </button>
             )}
           </div>
         </div>

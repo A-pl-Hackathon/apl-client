@@ -5,7 +5,11 @@ const USE_EXTERNAL_API = true;
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
-const EXTERNAL_API_URL = "https://api-dashboard.a-pl.xyz:8080/user-data/";
+
+const EXTERNAL_API_URLS = {
+  sepolia: "https://api-dashboard.a-pl.xyz:8080/user-data/",
+  saga: "http://15.164.143.220/user-data/",
+};
 
 function corsResponse(data: any, status: number = 200) {
   return NextResponse.json(data, {
@@ -34,7 +38,14 @@ export async function POST(request: NextRequest) {
 
     if (USE_EXTERNAL_API) {
       try {
-        console.log("Forwarding to external API:", EXTERNAL_API_URL);
+        // Determine which API URL to use based on network
+        const network = data.network || "sepolia";
+        const externalApiUrl =
+          EXTERNAL_API_URLS[network as keyof typeof EXTERNAL_API_URLS] ||
+          EXTERNAL_API_URLS.sepolia;
+
+        console.log(`Using network: ${network}`);
+        console.log("Forwarding to external API:", externalApiUrl);
         console.log("Payload:", JSON.stringify(data));
         console.log("BACKEND_URL environment variable:", BACKEND_URL);
 
@@ -43,7 +54,7 @@ export async function POST(request: NextRequest) {
           backendUrl: BACKEND_URL,
         };
 
-        const externalResponse = await fetch(EXTERNAL_API_URL, {
+        const externalResponse = await fetch(externalApiUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -125,12 +136,18 @@ export async function GET(request: NextRequest) {
   if (USE_EXTERNAL_API) {
     try {
       const { searchParams } = request.nextUrl;
-      const url = new URL(EXTERNAL_API_URL);
+      const network = searchParams.get("network") || "sepolia";
+      const externalApiUrl =
+        EXTERNAL_API_URLS[network as keyof typeof EXTERNAL_API_URLS] ||
+        EXTERNAL_API_URLS.sepolia;
+
+      const url = new URL(externalApiUrl);
 
       searchParams.forEach((value, key) => {
         url.searchParams.append(key, value);
       });
 
+      console.log(`Using network: ${network}`);
       console.log("Forwarding GET to external API:", url.toString());
 
       const externalResponse = await fetch(url.toString(), {

@@ -15,16 +15,18 @@ interface WalletContextType {
   connecting: boolean;
   tokenBalance: string;
   tokenSymbol: string;
+  selectedNetwork: "sepolia" | "saga";
+  toggleNetwork: () => Promise<void>;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   isConnected: boolean;
 }
 
-const WalletContext = createContext<WalletContextType | undefined>(undefined);
+const WalletContext = createContext<WalletContextType | null>(null);
 
 export const useWallet = () => {
   const context = useContext(WalletContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useWallet must be used within a WalletProvider");
   }
   return context;
@@ -42,14 +44,118 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const [tokenBalance, setTokenBalance] = useState<string>("0");
   const [tokenSymbol, setTokenSymbol] = useState<string>("AGP");
   const [connecting, setConnecting] = useState<boolean>(false);
+  const [selectedNetwork, setSelectedNetwork] = useState<"sepolia" | "saga">(
+    "sepolia"
+  );
 
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "";
   const sepoliaContractAddress =
     process.env.NEXT_PUBLIC_SEPOLIA_CONTRACT_ADDRESS || "";
+  const sagaContractAddress =
+    process.env.NEXT_PUBLIC_SAGA_CONTRACT_ADDRESS ||
+    sepoliaContractAddress ||
+    contractAddress;
 
-  const connectWallet = async () => {
+  // Network chain IDs
+  const SEPOLIA_CHAIN_ID = 11155111;
+  const SAGA_CHAIN_ID = 2744440729579000;
+
+  const getChainIdForNetwork = (network: "sepolia" | "saga") => {
+    return network === "sepolia" ? SEPOLIA_CHAIN_ID : SAGA_CHAIN_ID;
+  };
+
+  const getContractAddressForNetwork = (network: "sepolia" | "saga") => {
+    return network === "sepolia" ? sepoliaContractAddress : sagaContractAddress;
+  };
+
+  const getNetworkNameByChainId = (chainId: number) => {
+    if (chainId === SEPOLIA_CHAIN_ID) return "sepolia";
+    if (chainId === SAGA_CHAIN_ID) return "saga";
+    return null;
+  };
+
+  const getNetworkDisplayName = (network: "sepolia" | "saga") => {
+    return network === "sepolia" ? "Sepolia" : "testagp_SAGA";
+  };
+
+  const toggleNetwork = async () => {
+    const newNetwork = selectedNetwork === "sepolia" ? "saga" : "sepolia";
+    setSelectedNetwork(newNetwork);
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("selectedNetwork", newNetwork);
+    }
+
+    if (provider && window.ethereum) {
+      try {
+        const targetChainId = getChainIdForNetwork(newNetwork);
+        const chainIdHex = `0x${targetChainId.toString(16)}`;
+
+        console.log(
+          `Attempting to switch to ${newNetwork} network (chainId: ${chainIdHex})`
+        );
+
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: chainIdHex }],
+        });
+
+        console.log(`Network switch to ${newNetwork} initiated`);
+      } catch (switchError: any) {
+        console.error("Error switching network:", switchError);
+
+        if (switchError.code === 4902 && newNetwork === "saga") {
+          try {
+            console.log("Attempting to add SAGA network to wallet");
+            await addNetworkToMetaMask("saga");
+          } catch (addError) {
+            console.error("Failed to add network:", addError);
+            setSelectedNetwork(selectedNetwork);
+            alert("Failed to add network to wallet. Please add it manually.");
+          }
+        } else {
+          setSelectedNetwork(selectedNetwork);
+          console.log(
+            "Network switch rejected or failed, reverting to",
+            selectedNetwork
+          );
+        }
+      }
+    } else {
+      console.log(
+        `Changed selected network to ${newNetwork} (disconnected state)`
+      );
+    }
+  };
+
+  const addNetworkToMetaMask = async (network: "sepolia" | "saga") => {
+    if (!window.ethereum) return;
+
+    if (network === "saga") {
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: `0x${SAGA_CHAIN_ID.toString(16)}`,
+            chainName: "testagp_SAGA",
+            nativeCurrency: {
+              name: "AGG",
+              symbol: "AGG",
+              decimals: 18,
+            },
+            rpcUrls: ["https://mainnet.sagachain.org"], // SAGA RPC URL
+            blockExplorerUrls: ["https://explorer.sagachain.org"], // SAGA Explorer URL
+          },
+        ],
+      });
+    }
+  };
+
+  const connectWallet = async (showErrors = true) => {
     if (typeof window === "undefined" || !window.ethereum) {
-      alert("MetaMask is not installed. Please install it to use this app.");
+      if (showErrors) {
+        alert("MetaMask is not installed. Please install it to use this app.");
+      }
       return;
     }
 
@@ -61,26 +167,36 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       const web3Signer = await web3Provider.getSigner();
       const currentAccount = await web3Signer.getAddress();
 
+      localStorage.setItem("walletAddress", currentAccount);
+
       const { chainId } = await web3Provider.getNetwork();
       console.log("Connected to chain ID:", Number(chainId));
 
-      if (Number(chainId) !== 11155111) {
-        alert("Please connect to the Sepolia Test Network in MetaMask.");
-        setConnecting(false);
-        return;
+      const currentChainId = Number(chainId);
+      const targetChainId = getChainIdForNetwork(selectedNetwork);
+
+      const detectedNetwork = getNetworkNameByChainId(currentChainId);
+      if (detectedNetwork) {
+        setSelectedNetwork(detectedNetwork);
+        localStorage.setItem("selectedNetwork", detectedNetwork);
       }
 
+      // Set provider, signer, and account regardless of network
       setProvider(web3Provider);
       setSigner(web3Signer);
       setAccount(currentAccount);
 
-      const addressToUse = sepoliaContractAddress || contractAddress;
+      // Use the current network address, not the selected network
+      const networkToUse = detectedNetwork || selectedNetwork;
+      const addressToUse = getContractAddressForNetwork(networkToUse);
+
       console.log("Using contract address:", addressToUse);
       console.log("NEXT_PUBLIC_CONTRACT_ADDRESS:", contractAddress);
       console.log(
         "NEXT_PUBLIC_SEPOLIA_CONTRACT_ADDRESS:",
         sepoliaContractAddress
       );
+      console.log("NEXT_PUBLIC_SAGA_CONTRACT_ADDRESS:", sagaContractAddress);
 
       const tokenContract = new Contract(addressToUse, tokenABI, web3Signer);
       setContract(tokenContract);
@@ -97,6 +213,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       console.log("Wallet connected:", currentAccount);
     } catch (error) {
       console.error("Wallet connection failed:", error);
+      if (showErrors) {
+        alert("Failed to connect wallet. Please try again.");
+      }
     } finally {
       setConnecting(false);
     }
@@ -108,6 +227,11 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     setProvider(null);
     setContract(null);
     setTokenBalance("0");
+
+    // Clear wallet from localStorage
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("walletAddress");
+    }
   };
 
   useEffect(() => {
@@ -125,7 +249,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
             const web3Signer = await web3Provider.getSigner();
             setSigner(web3Signer);
 
-            const addressToUse = sepoliaContractAddress || contractAddress;
+            const addressToUse = getContractAddressForNetwork(selectedNetwork);
             console.log(
               "Using contract address after account change:",
               addressToUse
@@ -159,8 +283,28 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       }
     };
 
-    const handleChainChanged = () => {
-      window.location.reload();
+    const handleChainChanged = (chainId: string) => {
+      console.log("Chain changed to:", chainId);
+      if (!chainId) return;
+
+      const numericChainId = parseInt(chainId, 16);
+      const detectedNetwork = getNetworkNameByChainId(numericChainId);
+
+      if (detectedNetwork) {
+        setSelectedNetwork(detectedNetwork);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("selectedNetwork", detectedNetwork);
+        }
+        console.log(`Updated network state to: ${detectedNetwork}`);
+
+        if (account && window.ethereum) {
+          connectWallet(false);
+        }
+      } else {
+        console.warn(
+          `Unknown chain ID: ${chainId}, keeping current network state: ${selectedNetwork}`
+        );
+      }
     };
 
     if (window.ethereum) {
@@ -177,7 +321,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         window.ethereum.removeListener("chainChanged", handleChainChanged);
       }
     };
-  }, [account, contractAddress, sepoliaContractAddress]);
+  }, [account, selectedNetwork]);
 
   useEffect(() => {
     const getTokenBalance = async () => {
@@ -234,11 +378,28 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   }, [contract, account]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedNetwork = localStorage.getItem("selectedNetwork");
+      if (savedNetwork === "saga" || savedNetwork === "sepolia") {
+        setSelectedNetwork(savedNetwork);
+      }
+
+      const savedAccount = localStorage.getItem("walletAddress");
+      if (savedAccount && window.ethereum) {
+        console.log("Attempting to reconnect saved wallet:", savedAccount);
+        connectWallet(false);
+      }
+    }
+  }, []);
+
   const value = {
     account,
     connecting,
     tokenBalance,
     tokenSymbol,
+    selectedNetwork,
+    toggleNetwork,
     connectWallet,
     disconnectWallet,
     isConnected: !!account,

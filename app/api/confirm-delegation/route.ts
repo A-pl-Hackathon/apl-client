@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const USE_EXTERNAL_API = true;
-const EXTERNAL_API_URL =
-  "https://api-dashboard.a-pl.xyz:8080/confirm-delegation/";
+const EXTERNAL_API_URLS = {
+  sepolia: "https://api-dashboard.a-pl.xyz:8080/confirm-delegation/",
+  saga: "http://15.164.143.220/confirm-delegation/",
+};
 
 function corsResponse(data: any, status: number = 200) {
   return NextResponse.json(data, {
@@ -34,20 +36,26 @@ export async function POST(request: NextRequest) {
       return corsResponse({ error: "Missing or invalid confirmed field" }, 400);
     }
 
+    const network = data.network || "sepolia";
+    console.log(`Using network: ${network}`);
+
     if (USE_EXTERNAL_API) {
       try {
-        console.log(
-          "Forwarding to external confirmation API:",
-          EXTERNAL_API_URL
-        );
+        const externalApiUrl =
+          EXTERNAL_API_URLS[network as keyof typeof EXTERNAL_API_URLS] ||
+          EXTERNAL_API_URLS.sepolia;
+        console.log("Forwarding to external confirmation API:", externalApiUrl);
         console.log("Payload:", JSON.stringify(data));
 
-        const externalResponse = await fetch(EXTERNAL_API_URL, {
+        const externalResponse = await fetch(externalApiUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify({
+            request_id: data.request_id,
+            confirmed: data.confirmed,
+          }),
         });
 
         const responseText = await externalResponse.text();
@@ -93,6 +101,7 @@ export async function POST(request: NextRequest) {
         : "Delegation was declined by the user",
       request_id: data.request_id,
       confirmed: data.confirmed,
+      network: network,
     });
   } catch (error: any) {
     console.error("Error processing delegation confirmation:", error);

@@ -5,6 +5,7 @@ interface UserDataPayload {
   };
   agentModel: string;
   prompt?: string;
+  network?: "sepolia" | "saga";
 }
 
 interface DelegationConfirmationData {
@@ -14,6 +15,23 @@ interface DelegationConfirmationData {
   token: string;
   backendPublicAddress: string;
 }
+
+const getDefaultNetwork = (): "sepolia" | "saga" => {
+  if (typeof window === "undefined") {
+    return "sepolia";
+  }
+
+  try {
+    const savedNetwork = localStorage.getItem("selectedNetwork");
+    if (savedNetwork === "saga" || savedNetwork === "sepolia") {
+      return savedNetwork as "sepolia" | "saga";
+    }
+  } catch (error) {
+    console.error("[userDataApi] Error accessing localStorage:", error);
+  }
+
+  return "sepolia";
+};
 
 function truncateAddress(
   address: string,
@@ -29,14 +47,21 @@ function truncateAddress(
 }
 
 export async function getWalletData(
-  address: string
+  address: string,
+  network?: "sepolia" | "saga"
 ): Promise<{ personalData?: string }> {
   try {
+    const effectiveNetwork = network || getDefaultNetwork();
+
     console.log(`[userDataApi] Fetching wallet data for address: ${address}`);
+    console.log(`[userDataApi] Using network: ${effectiveNetwork}`);
     console.log(
       `[userDataApi] Address type: ${typeof address}, length: ${address.length}`
     );
-    const response = await fetch(`/api/wallet-data?address=${address}`);
+
+    const url = `/api/wallet-data?address=${address}&network=${effectiveNetwork}`;
+
+    const response = await fetch(url);
 
     if (!response.ok) {
       console.error(
@@ -90,9 +115,12 @@ export async function getWalletData(
 }
 
 export async function sendUserData(payload: UserDataPayload): Promise<any> {
+  const network = payload.network || getDefaultNetwork();
+
   const finalPayload = {
     ...payload,
     prompt: payload.prompt || "",
+    network: network,
   };
 
   console.log(
@@ -112,9 +140,18 @@ export async function sendUserData(payload: UserDataPayload): Promise<any> {
     "[userDataApi] Is data empty:",
     finalPayload.personalData.data === ""
   );
+  console.log("[userDataApi] Using network:", network);
 
-  const apiBaseUrl =
-    process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+  let apiBaseUrl;
+  if (network === "saga") {
+    apiBaseUrl = "http://15.164.143.220";
+    console.log("[userDataApi] Using testagp_SAGA API endpoint:", apiBaseUrl);
+  } else {
+    apiBaseUrl =
+      process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+    console.log("[userDataApi] Using Sepolia API endpoint:", apiBaseUrl);
+  }
+
   const apiUrl = `${apiBaseUrl}/user-data/`;
 
   try {
@@ -135,17 +172,14 @@ export async function sendUserData(payload: UserDataPayload): Promise<any> {
     const responseData = await response.json();
     console.log("[userDataApi] Initial API response:", responseData);
 
-    // Check if the response contains delegation confirmation data
     if (responseData.requestId) {
-      // If we have a requestId, we need to handle the delegation confirmation
-      return await handleDelegationConfirmation(responseData);
+      return await handleDelegationConfirmation(responseData, network);
     }
 
     return responseData;
   } catch (error) {
     console.error("[userDataApi] API request failed:", error);
 
-    // Fall back to local API endpoint
     try {
       console.log("[userDataApi] Falling back to local API endpoint...");
       const response = await fetch("/api/user-data/", {
@@ -166,10 +200,8 @@ export async function sendUserData(payload: UserDataPayload): Promise<any> {
         );
       }
 
-      // Check if the response contains delegation confirmation data
       if (responseData.requestId) {
-        // If we have a requestId, we need to handle the delegation confirmation
-        return await handleDelegationConfirmation(responseData);
+        return await handleDelegationConfirmation(responseData, network);
       }
 
       console.log("[userDataApi] Local API response:", responseData);
@@ -187,15 +219,15 @@ export async function sendUserData(payload: UserDataPayload): Promise<any> {
 }
 
 async function handleDelegationConfirmation(
-  data: DelegationConfirmationData
+  data: DelegationConfirmationData,
+  network?: "sepolia" | "saga"
 ): Promise<any> {
   console.log("[userDataApi] Handling delegation confirmation:", data);
+  console.log("[userDataApi] Using network:", network);
 
-  // Show confirmation dialog to user
   const userConfirmed = await showDelegationConfirmation(data);
 
-  // Send the user's response to the API
-  return await confirmDelegation(data.requestId, userConfirmed);
+  return await confirmDelegation(data.requestId, userConfirmed, network);
 }
 
 async function showDelegationConfirmation(
@@ -218,17 +250,27 @@ async function showDelegationConfirmation(
 
 async function confirmDelegation(
   requestId: string,
-  confirmed: boolean
+  confirmed: boolean,
+  network?: "sepolia" | "saga"
 ): Promise<any> {
   console.log(
-    `[userDataApi] Confirming delegation: requestId=${requestId}, confirmed=${confirmed}`
+    `[userDataApi] Confirming delegation: requestId=${requestId}, confirmed=${confirmed}, network=${network}`
   );
 
-  const apiBaseUrl =
-    process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+  let apiBaseUrl;
+  if (network === "saga") {
+    apiBaseUrl = "http://15.164.143.220";
+    console.log("[userDataApi] Using testagp_SAGA API endpoint:", apiBaseUrl);
+  } else {
+    apiBaseUrl =
+      process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+    console.log("[userDataApi] Using Sepolia API endpoint:", apiBaseUrl);
+  }
+
   const apiUrl = `${apiBaseUrl}/confirm-delegation/`;
 
   try {
+    console.log(`[userDataApi] Sending confirmation request to ${apiUrl}`);
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
@@ -241,6 +283,9 @@ async function confirmDelegation(
     });
 
     if (!response.ok) {
+      console.error(
+        `[userDataApi] Confirmation API request failed with status ${response.status}`
+      );
       throw new Error(
         `Confirmation API request failed with status ${response.status}`
       );
@@ -268,6 +313,7 @@ async function confirmDelegation(
         body: JSON.stringify({
           request_id: requestId,
           confirmed: confirmed,
+          network: network || "sepolia", // Pass network info to the backend
         }),
         credentials: "include",
       });

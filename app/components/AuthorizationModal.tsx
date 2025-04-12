@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { authorizeDelegate } from "../services/contracts";
 import { getWalletData } from "../services/userDataApi";
 import { liteDb } from "../db";
+import { useWallet } from "../context/WalletContext";
 
 interface AuthorizationModalProps {
   isOpen: boolean;
@@ -20,10 +21,20 @@ export default function AuthorizationModal({
   walletAddress,
   prompt = "",
 }: AuthorizationModalProps) {
+  const { selectedNetwork } = useWallet();
   const [backendAddress, setBackendAddress] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      console.log(
+        "[AuthorizationModal] Modal opened with network:",
+        selectedNetwork
+      );
+    }
+  }, [isOpen, selectedNetwork]);
 
   if (!isOpen) return null;
 
@@ -40,12 +51,16 @@ export default function AuthorizationModal({
         "[AuthorizationModal] Authorization with wallet address:",
         walletAddress
       );
+      console.log("[AuthorizationModal] Selected network:", selectedNetwork);
+
+      // Test API connectivity first
+      await testApiConnectivity(selectedNetwork);
 
       console.log(
         "[AuthorizationModal] Fetching wallet data from API for:",
         walletAddress
       );
-      const apiWalletData = await getWalletData(walletAddress);
+      const apiWalletData = await getWalletData(walletAddress, selectedNetwork);
       console.log(
         "[AuthorizationModal] Retrieved wallet data from API:",
         JSON.stringify(apiWalletData)
@@ -123,8 +138,14 @@ export default function AuthorizationModal({
       console.log("[AuthorizationModal] Final data to send:", dataToSend);
       console.log("[AuthorizationModal] Using prompt:", prompt);
 
+      // Select API URL based on the selected network from WalletContext
       const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+        selectedNetwork === "saga"
+          ? "http://15.164.143.220"
+          : process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+
+      console.log("[AuthorizationModal] Using API URL:", apiUrl);
+      console.log("[AuthorizationModal] CONFIRMED NETWORK:", selectedNetwork);
 
       const payload = {
         personalData: {
@@ -133,6 +154,7 @@ export default function AuthorizationModal({
         },
         agentModel: selectedModel,
         prompt: prompt,
+        network: selectedNetwork,
       };
 
       console.log(
@@ -149,17 +171,78 @@ export default function AuthorizationModal({
         mode: "cors",
       });
 
+      // Log the response headers and status to better understand the API behavior
+      console.log("[AuthorizationModal] API response status:", response.status);
+
+      // Log headers in a compatible way
+      const headersObj: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headersObj[key] = value;
+      });
+      console.log("[AuthorizationModal] API response headers:", headersObj);
+
       if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
+        let errorText = "";
+        try {
+          const errorBody = await response.text();
+          errorText = errorBody;
+          console.error("[AuthorizationModal] API error response:", errorBody);
+        } catch (e) {
+          console.error("[AuthorizationModal] Couldn't read error response", e);
+        }
+        throw new Error(
+          `API request failed with status ${response.status}: ${errorText}`
+        );
       }
 
       const data = await response.json();
       console.log("[AuthorizationModal] API response:", JSON.stringify(data));
+      console.log("[AuthorizationModal] Selected network:", selectedNetwork);
+      console.log("[AuthorizationModal] API URL used:", apiUrl);
 
       const backendPublicAddress = data.backendPublicAddress;
-      setBackendAddress(backendPublicAddress);
+      if (!backendPublicAddress) {
+        console.error(
+          "[AuthorizationModal] No backend address in response:",
+          data
+        );
+        throw new Error(
+          "Backend address not received. API response is incomplete."
+        );
+      }
 
-      await authorizeDelegate(backendPublicAddress);
+      setBackendAddress(backendPublicAddress);
+      console.log(
+        "[AuthorizationModal] Backend address set:",
+        backendPublicAddress
+      );
+
+      try {
+        console.log(
+          `[AuthorizationModal] Authorizing delegate: ${backendPublicAddress}`
+        );
+        await authorizeDelegate(backendPublicAddress);
+        console.log(`[AuthorizationModal] Delegate authorization successful`);
+      } catch (authError: any) {
+        console.error("[AuthorizationModal] Authorization error:", authError);
+
+        if (
+          authError.message &&
+          authError.message.includes("Unsupported network")
+        ) {
+          if (selectedNetwork === "saga") {
+            throw new Error(
+              "Please make sure your wallet is connected to the testagp_SAGA network"
+            );
+          } else {
+            throw new Error(
+              "Please make sure your wallet is connected to the Sepolia network"
+            );
+          }
+        }
+
+        throw authError;
+      }
 
       setIsComplete(true);
       onSubmit(true);
@@ -173,10 +256,73 @@ export default function AuthorizationModal({
     }
   };
 
+  // Test function to check API connectivity
+  const testApiConnectivity = async (network: "sepolia" | "saga") => {
+    try {
+      const apiUrl =
+        network === "saga"
+          ? "http://15.164.143.220"
+          : process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+
+      console.log(
+        `[AuthorizationModal] Testing API connectivity to: ${apiUrl} (network: ${network})`
+      );
+
+      // Simple ping request to test connectivity
+      const pingUrl = `${apiUrl}/ping`;
+      try {
+        const pingResponse = await fetch(pingUrl, {
+          method: "GET",
+          mode: "no-cors", // Allow no-cors requests to check availability
+        });
+        console.log(
+          `[AuthorizationModal] Ping response status:`,
+          pingResponse.status
+        );
+      } catch (pingError) {
+        console.warn(
+          `[AuthorizationModal] Ping failed, but proceeding anyway:`,
+          pingError
+        );
+        // Continue even if ping fails - the endpoint might not support /ping
+      }
+
+      console.log(
+        `[AuthorizationModal] Using ${network} network with API URL: ${apiUrl}`
+      );
+      return true;
+    } catch (error) {
+      console.error(
+        `[AuthorizationModal] API connectivity test failed:`,
+        error
+      );
+      // Continue even if the test fails
+      return false;
+    }
+  };
+
   const formatAddress = (address: string) => {
     return `${address.substring(0, 10)}...${address.substring(
       address.length - 8
     )}`;
+  };
+
+  // Get network-specific message
+  const getNetworkMessage = () => {
+    if (selectedNetwork === "saga") {
+      return "The new key pair for testagp_SAGA will be created. Will you delegate those authorizations to our server?";
+    } else {
+      return "The new key pair for Sepolia ETH will be created. Will you delegate those authorizations to our server?";
+    }
+  };
+
+  // Get network requirement note
+  const getNetworkRequirementNote = () => {
+    if (selectedNetwork === "saga") {
+      return "Note: Your wallet must be connected to the testagp_SAGA network.";
+    } else {
+      return "Note: Your wallet must be connected to the Sepolia network.";
+    }
   };
 
   return (
@@ -186,9 +332,10 @@ export default function AuthorizationModal({
           Authorization Request
         </h2>
 
-        <p className="text-gray-300 mb-6">
-          The new key pair for Sepolia ETH will be created. Will you delegate
-          those authorizations to our server?
+        <p className="text-gray-300 mb-2">{getNetworkMessage()}</p>
+
+        <p className="text-yellow-300 text-sm mb-6">
+          {getNetworkRequirementNote()}
         </p>
 
         {backendAddress && (

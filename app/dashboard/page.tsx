@@ -5,6 +5,7 @@ import Link from "next/link";
 import DashboardLayout from "../components/DashboardLayout";
 import Card from "../components/Card";
 import UserDataCard from "../components/UserDataCard";
+import NetworkStatus from "../components/NetworkStatus";
 import { useWallet } from "../context/WalletContext";
 
 export default function Dashboard() {
@@ -12,7 +13,7 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         {/* Blog Post Section */}
         <Card title="Blog Post" className="h-52">
           <p className="text-gray-700 dark:text-gray-300">
@@ -45,7 +46,11 @@ export default function Dashboard() {
             </div>
           </div>
         </Card>
+
+        {/* Network Status Section */}
+        <NetworkStatus />
       </div>
+
       <UserDataCard
         walletAddress={account || ""}
         formatAccount={(address) =>
