@@ -21,7 +21,12 @@ const AI_MODELS: AIModel[] = [
     available: true,
   },
   { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", available: true },
-  { id: "gemini-2.0", name: "Gemini 2.0", provider: "Google", available: true },
+  {
+    id: "gemini-2.0-flash",
+    name: "Gemini 2.0",
+    provider: "Google",
+    available: true,
+  },
   {
     id: "claude-3-opus",
     name: "Claude 3 Opus",

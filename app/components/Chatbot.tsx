@@ -38,7 +38,12 @@ const AI_MODELS: AIModel[] = [
     available: true,
   },
   { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", available: true },
-  { id: "gemini-2.0", name: "Gemini 2.0", provider: "Google", available: true },
+  {
+    id: "gemini-2.0-flash",
+    name: "Gemini 2.0",
+    provider: "Google",
+    available: true,
+  },
   {
     id: "claude-3-opus",
     name: "Claude 3 Opus",
@@ -381,6 +386,7 @@ export default function Chatbot() {
       const response = await sendUserData(payload);
       console.log("[Chatbot] API response:", JSON.stringify(response));
 
+      // After sending data, generate an AI response based on the last user prompt
       setMessages((prevMessages) => [
         ...prevMessages.filter((msg) => !msg.isSurfing),
         {
@@ -389,6 +395,35 @@ export default function Chatbot() {
           sender: "ai",
         },
       ]);
+
+      // Wait a moment and then call the AI with the last user prompt to generate a response
+      setTimeout(async () => {
+        try {
+          // Use the stored last user prompt to generate a response
+          const updatedHistory = [
+            ...chatHistory,
+            { role: "user" as const, content: lastUserPrompt },
+          ];
+
+          const aiResponse = await callAI(updatedHistory, selectedModel);
+
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            {
+              id: Date.now(),
+              text: aiResponse.message,
+              sender: "ai",
+            },
+          ]);
+
+          setChatHistory([
+            ...updatedHistory,
+            { role: "assistant" as const, content: aiResponse.message },
+          ]);
+        } catch (error) {
+          console.error("Error getting AI response after auth:", error);
+        }
+      }, 3000); // Wait 3 seconds before showing the AI response
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";
