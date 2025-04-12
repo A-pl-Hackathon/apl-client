@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { sendUserData } from "../services/userDataApi";
 import { liteDb, Wallet } from "../db";
 
 interface UserDataCardProps {
@@ -59,20 +58,46 @@ export default function UserDataCard({
     const fetchWalletData = async () => {
       if (walletAddress && typeof window !== "undefined") {
         try {
-          console.log("Fetching wallet data for:", walletAddress);
+          console.log(
+            "[UserDataCard] Fetching wallet data for:",
+            walletAddress
+          );
+          console.log(
+            "[UserDataCard] Wallet address type:",
+            typeof walletAddress
+          );
+          console.log(
+            "[UserDataCard] Wallet address length:",
+            walletAddress.length
+          );
+
           const walletData = await liteDb.getWalletByAddress(walletAddress);
-          console.log("Retrieved wallet data:", walletData);
+          console.log("[UserDataCard] Retrieved wallet data:", walletData);
 
           if (walletData && walletData.personalData) {
+            console.log(
+              "[UserDataCard] Personal data type:",
+              typeof walletData.personalData
+            );
+            console.log(
+              "[UserDataCard] Personal data:",
+              walletData.personalData
+            );
+
             // Try to parse personalData if it's a JSON string
             try {
               const parsedData = JSON.parse(walletData.personalData);
+              console.log("[UserDataCard] Parsed data:", parsedData);
+
               if (parsedData.data) {
-                console.log("Setting parsed personal data:", parsedData.data);
+                console.log(
+                  "[UserDataCard] Setting parsed personal data:",
+                  parsedData.data
+                );
                 setPersonalData(parsedData.data);
               } else {
                 console.log(
-                  "Setting personal data directly:",
+                  "[UserDataCard] Setting personal data directly:",
                   walletData.personalData
                 );
                 setPersonalData(walletData.personalData);
@@ -80,14 +105,14 @@ export default function UserDataCard({
             } catch (e) {
               // If it's not a valid JSON, use it directly
               console.log(
-                "Setting personal data directly:",
+                "[UserDataCard] Failed to parse JSON, setting personal data directly:",
                 walletData.personalData
               );
               setPersonalData(walletData.personalData);
             }
           } else {
             console.log(
-              "No saved data found for wallet, clearing personal data"
+              "[UserDataCard] No saved data found for wallet, clearing personal data"
             );
             setPersonalData("");
 
@@ -96,19 +121,23 @@ export default function UserDataCard({
               address: walletAddress,
               personalData: "",
             };
-            console.log("Creating new wallet entry:", newWallet);
+            console.log("[UserDataCard] Creating new wallet entry:", newWallet);
             await liteDb.upsertWallet(newWallet);
           }
 
           // Debug: List all wallets in database
           const allWallets = await liteDb.getAllWallets();
-          console.log(`Total wallets in database: ${allWallets.length}`);
-          console.log("All wallets:", allWallets);
+          console.log(
+            `[UserDataCard] Total wallets in database: ${allWallets.length}`
+          );
+          console.log("[UserDataCard] All wallets:", allWallets);
         } catch (error) {
-          console.error("Error fetching wallet data:", error);
+          console.error("[UserDataCard] Error fetching wallet data:", error);
         }
       } else {
-        console.log("No wallet address provided, clearing personal data");
+        console.log(
+          "[UserDataCard] No wallet address provided, clearing personal data"
+        );
         setPersonalData("");
       }
     };
@@ -132,18 +161,40 @@ export default function UserDataCard({
         data: personalData,
       };
 
+      const serializedData = JSON.stringify(personalDataObj);
+      console.log("[UserDataCard] Serialized data to save:", serializedData);
+      console.log("[UserDataCard] Data type:", typeof serializedData);
+
       const wallet: Wallet = {
         address: walletAddress,
-        personalData: JSON.stringify(personalDataObj),
+        personalData: serializedData,
       };
 
-      console.log("Saving wallet to database:", wallet);
+      console.log("[UserDataCard] Saving wallet to database:", wallet);
 
       if (typeof window !== "undefined") {
         await liteDb.upsertWallet(wallet);
 
         const savedWallet = await liteDb.getWalletByAddress(walletAddress);
-        console.log("Wallet data after save:", savedWallet);
+        console.log("[UserDataCard] Wallet data after save:", savedWallet);
+
+        if (savedWallet) {
+          console.log(
+            "[UserDataCard] Saved personal data:",
+            savedWallet.personalData
+          );
+          console.log(
+            "[UserDataCard] Personal data type:",
+            typeof savedWallet.personalData
+          );
+
+          try {
+            const parsed = JSON.parse(savedWallet.personalData);
+            console.log("[UserDataCard] Parsed saved data:", parsed);
+          } catch (e) {
+            console.log("[UserDataCard] Could not parse saved data as JSON");
+          }
+        }
 
         try {
           const apiResponse = await fetch(`/api/database`, {
@@ -153,47 +204,42 @@ export default function UserDataCard({
             },
             body: JSON.stringify({
               address: walletAddress,
-              personalData: JSON.stringify(personalDataObj),
+              personalData: serializedData,
             }),
           });
 
           if (apiResponse.ok) {
-            console.log("Successfully updated wallet via API route");
+            console.log(
+              "[UserDataCard] Successfully updated wallet via API route"
+            );
+            const responseData = await apiResponse.json();
+            console.log("[UserDataCard] API response:", responseData);
           } else {
             console.warn(
-              "API route update failed, but IndexedDB update succeeded"
+              "[UserDataCard] API route update failed, but IndexedDB update succeeded"
             );
           }
         } catch (apiError) {
           console.warn(
-            "API route update failed, but IndexedDB update succeeded:",
+            "[UserDataCard] API route update failed, but IndexedDB update succeeded:",
             apiError
           );
         }
       }
 
-      const payload = {
-        personalData: {
-          walletAddress,
-          data: personalData,
-        },
-        agentModel: selectedModel,
-        prompt: "",
-      };
-
-      console.log("Sending data to API:", payload);
-      await sendUserData(payload);
       setSubmitSuccess(true);
+      console.log("[UserDataCard] Data successfully saved to local database");
 
       // Verify all wallets in database after update
       if (typeof window !== "undefined") {
         const allWallets = await liteDb.getAllWallets();
         console.log(
-          `Total wallets in database after update: ${allWallets.length}`
+          `[UserDataCard] Total wallets in database after update: ${allWallets.length}`
         );
+        console.log("[UserDataCard] Updated wallet list:", allWallets);
       }
     } catch (error) {
-      console.error("Error in handleSubmit:", error);
+      console.error("[UserDataCard] Error in handleSubmit:", error);
       setSubmitError(
         error instanceof Error ? error.message : "An unknown error occurred"
       );
@@ -254,7 +300,7 @@ export default function UserDataCard({
               : "bg-blue-600 text-white hover:bg-blue-700"
           }`}
         >
-          {isSubmitting ? "Submitting..." : "Submit"}
+          {isSubmitting ? "Submitting..." : "Save Data"}
         </button>
       </form>
     </div>

@@ -94,35 +94,156 @@ class LiteDatabase {
   }
 
   async getWalletByAddress(address: string): Promise<Wallet | null> {
+    console.log(`[lite-db] getWalletByAddress called with: "${address}"`);
+    console.log(
+      `[lite-db] Address type: ${typeof address}, length: ${address.length}`
+    );
+
+    if (!address) {
+      console.log(`[lite-db] Error: Empty address provided`);
+      return null;
+    }
+
+    const normalizedAddress = address.toLowerCase();
+    console.log(`[lite-db] Normalized address: ${normalizedAddress}`);
+
     // For server-side rendering, return from cache
     if (typeof window === "undefined") {
-      return walletsCache.find((wallet) => wallet.address === address) || null;
+      console.log(
+        `[lite-db] Server-side rendering, searching in cache of ${walletsCache.length} wallets`
+      );
+      // 캐시에서 주소 로그 출력
+      console.log(
+        `[lite-db] Cache wallet addresses:`,
+        walletsCache.map((w) => w.address)
+      );
+
+      // 대소문자 구분 없이 주소 비교
+      const cachedWallet = walletsCache.find(
+        (wallet) => wallet.address.toLowerCase() === normalizedAddress
+      );
+      console.log(`[lite-db] Cached wallet found:`, !!cachedWallet);
+      if (cachedWallet) {
+        console.log(
+          `[lite-db] Cached wallet data:`,
+          JSON.stringify(cachedWallet)
+        );
+        console.log(
+          `[lite-db] Personal data type:`,
+          typeof cachedWallet.personalData
+        );
+        console.log(`[lite-db] Personal data:`, cachedWallet.personalData);
+
+        // 데이터가 JSON 형식인지 확인
+        try {
+          if (
+            cachedWallet.personalData &&
+            typeof cachedWallet.personalData === "string"
+          ) {
+            const parsed = JSON.parse(cachedWallet.personalData);
+            console.log(`[lite-db] Parsed personal data:`, parsed);
+          }
+        } catch (e) {
+          console.log(`[lite-db] Personal data is not JSON`);
+        }
+      }
+      return cachedWallet || null;
     }
 
     try {
+      console.log(`[lite-db] Browser environment, initializing database...`);
       const db = await this.initializeDatabase();
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(this.storeName, "readonly");
         const store = transaction.objectStore(this.storeName);
-        const request = store.get(address);
+
+        let request = store.get(address);
 
         request.onsuccess = () => {
-          resolve(request.result || null);
+          let result = request.result;
+
+          if (!result) {
+            console.log(
+              `[lite-db] Exact address match not found, getting all wallets...`
+            );
+            const getAllRequest = store.getAll();
+
+            getAllRequest.onsuccess = () => {
+              const allWallets = getAllRequest.result || [];
+              console.log(`[lite-db] Found ${allWallets.length} wallets in DB`);
+
+              result = allWallets.find(
+                (wallet) => wallet.address.toLowerCase() === normalizedAddress
+              );
+
+              finishRequest(result);
+            };
+
+            getAllRequest.onerror = (event) => {
+              console.error(`[lite-db] Error fetching all wallets:`, event);
+              finishRequest(null);
+            };
+          } else {
+            finishRequest(result);
+          }
         };
 
+        function finishRequest(result: any) {
+          console.log(
+            `[lite-db] Database lookup result for "${address}":`,
+            !!result
+          );
+          if (result) {
+            console.log(
+              `[lite-db] Wallet found with address: ${result.address}`
+            );
+            console.log(`[lite-db] Personal data:`, result.personalData);
+            console.log(
+              `[lite-db] Personal data type:`,
+              typeof result.personalData
+            );
+
+            try {
+              if (
+                result.personalData &&
+                typeof result.personalData === "string"
+              ) {
+                const parsed = JSON.parse(result.personalData);
+                console.log(`[lite-db] Parsed personal data:`, parsed);
+              }
+            } catch (e) {
+              console.log(`[lite-db] Personal data is not JSON`);
+            }
+          }
+          resolve(result || null);
+        }
+
         request.onerror = (event) => {
-          console.error(`Error fetching wallet ${address}:`, event);
+          console.error(`[lite-db] Error fetching wallet ${address}:`, event);
           reject(new Error(`Failed to fetch wallet ${address}`));
         };
       });
     } catch (error) {
-      console.error(`Error in getWalletByAddress for ${address}:`, error);
-      return walletsCache.find((wallet) => wallet.address === address) || null;
+      console.error(
+        `[lite-db] Error in getWalletByAddress for ${address}:`,
+        error
+      );
+      console.log(`[lite-db] Falling back to cache search`);
+      const cachedWallet = walletsCache.find(
+        (wallet) => wallet.address.toLowerCase() === normalizedAddress
+      );
+      console.log(`[lite-db] Fallback cached wallet found:`, !!cachedWallet);
+      if (cachedWallet) {
+        console.log(
+          `[lite-db] Fallback wallet data:`,
+          JSON.stringify(cachedWallet)
+        );
+      }
+      return cachedWallet || null;
     }
   }
 
   async upsertWallet(wallet: Wallet): Promise<Wallet> {
-    // Always update the cache
     const existingIndex = walletsCache.findIndex(
       (w) => w.address === wallet.address
     );
@@ -132,7 +253,6 @@ class LiteDatabase {
       walletsCache.push(wallet);
     }
 
-    // For server-side rendering, just update the cache
     if (typeof window === "undefined") {
       return wallet;
     }

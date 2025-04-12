@@ -9,6 +9,7 @@ import AuthorizationModal from "./AuthorizationModal";
 import { connectToMetaMask } from "../services/metamask";
 import { sendUserData, getWalletData } from "../services/userDataApi";
 import UserDataCard from "./UserDataCard";
+import { liteDb } from "../db";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -43,23 +44,136 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       setIsLoading(true);
 
       if (!account) {
+        console.log(
+          "[DashboardLayout] No wallet connected, attempting to connect..."
+        );
         await connectWallet();
       }
 
-      if (account) {
-        const walletData = await getWalletData(account);
+      const walletAddress = account;
+      console.log("[DashboardLayout] Current wallet address:", walletAddress);
+      console.log(
+        "[DashboardLayout] Wallet account type:",
+        typeof walletAddress
+      );
+      console.log(
+        "[DashboardLayout] Wallet account length:",
+        walletAddress ? walletAddress.length : 0
+      );
 
-        const payload = {
-          personalData: {
-            walletAddress: account,
-            data: walletData.personalData || "",
-          },
-          agentModel: selectedModel,
-          prompt: "",
-        };
-
-        await sendUserData(payload);
+      if (!walletAddress) {
+        console.error("[DashboardLayout] Failed to get wallet address");
+        return;
       }
+
+      console.log(
+        "[DashboardLayout] Fetching wallet data from API for:",
+        walletAddress
+      );
+      const apiWalletData = await getWalletData(walletAddress);
+      console.log(
+        "[DashboardLayout] Retrieved wallet data from API:",
+        JSON.stringify(apiWalletData)
+      );
+
+      console.log(
+        "[DashboardLayout] Fetching wallet data from liteDb for:",
+        walletAddress
+      );
+      const localWallet = await liteDb.getWalletByAddress(walletAddress);
+      console.log(
+        "[DashboardLayout] Retrieved wallet data from liteDb:",
+        JSON.stringify(localWallet)
+      );
+
+      let dataToSend = "";
+
+      if (localWallet && localWallet.personalData) {
+        console.log("[DashboardLayout] Using data from liteDb");
+        try {
+          const parsedData = JSON.parse(localWallet.personalData);
+          console.log(
+            "[DashboardLayout] Parsed personalData from liteDb:",
+            parsedData
+          );
+
+          if (parsedData.data) {
+            dataToSend = parsedData.data;
+            console.log(
+              "[DashboardLayout] Extracted data field from liteDb:",
+              dataToSend
+            );
+          } else {
+            dataToSend = localWallet.personalData;
+          }
+        } catch (e) {
+          console.log(
+            "[DashboardLayout] Failed to parse liteDb data as JSON, using as is"
+          );
+          dataToSend = localWallet.personalData;
+        }
+      } else if (apiWalletData && apiWalletData.personalData) {
+        console.log("[DashboardLayout] Using data from API");
+        try {
+          if (
+            typeof apiWalletData.personalData === "string" &&
+            apiWalletData.personalData.trim()
+          ) {
+            const parsedData = JSON.parse(apiWalletData.personalData);
+            console.log(
+              "[DashboardLayout] Parsed personalData from API:",
+              parsedData
+            );
+
+            if (parsedData.data) {
+              dataToSend = parsedData.data;
+              console.log(
+                "[DashboardLayout] Extracted data field from API:",
+                dataToSend
+              );
+            } else {
+              dataToSend = apiWalletData.personalData;
+            }
+          } else {
+            dataToSend = apiWalletData.personalData;
+          }
+        } catch (e) {
+          console.log(
+            "[DashboardLayout] Failed to parse API data as JSON, using as is"
+          );
+          dataToSend = apiWalletData.personalData;
+        }
+      }
+      console.log("[DashboardLayout] Final data to send:", dataToSend);
+
+      const payload = {
+        personalData: {
+          walletAddress: walletAddress,
+          data: dataToSend,
+        },
+        agentModel: selectedModel,
+        prompt: "",
+      };
+
+      console.log(
+        "[DashboardLayout] Payload prepared:",
+        JSON.stringify(payload)
+      );
+      console.log(
+        "[DashboardLayout] Sending payload with address:",
+        payload.personalData.walletAddress
+      );
+      console.log(
+        "[DashboardLayout] Sending payload with data:",
+        payload.personalData.data
+      );
+      console.log(
+        "[DashboardLayout] Data type:",
+        typeof payload.personalData.data
+      );
+
+      const response = await sendUserData(payload);
+      console.log("[DashboardLayout] API response:", JSON.stringify(response));
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";

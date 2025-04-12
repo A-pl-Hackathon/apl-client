@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { authorizeDelegate } from "../services/contracts";
+import { getWalletData } from "../services/userDataApi";
+import { liteDb } from "../db";
 
 interface AuthorizationModalProps {
   isOpen: boolean;
@@ -28,21 +30,119 @@ export default function AuthorizationModal({
     setError(null);
 
     try {
+      if (!walletAddress) {
+        throw new Error("지갑 주소가 없습니다. MetaMask 연결을 확인해주세요.");
+      }
+
+      console.log(
+        "[AuthorizationModal] Authorization with wallet address:",
+        walletAddress
+      );
+
+      console.log(
+        "[AuthorizationModal] Fetching wallet data from API for:",
+        walletAddress
+      );
+      const apiWalletData = await getWalletData(walletAddress);
+      console.log(
+        "[AuthorizationModal] Retrieved wallet data from API:",
+        JSON.stringify(apiWalletData)
+      );
+
+      console.log(
+        "[AuthorizationModal] Fetching wallet data from liteDb for:",
+        walletAddress
+      );
+      const localWallet = await liteDb.getWalletByAddress(walletAddress);
+      console.log(
+        "[AuthorizationModal] Retrieved wallet data from liteDb:",
+        JSON.stringify(localWallet)
+      );
+
+      let dataToSend = "";
+
+      if (localWallet && localWallet.personalData) {
+        console.log("[AuthorizationModal] Using data from liteDb");
+        try {
+          const parsedData = JSON.parse(localWallet.personalData);
+          console.log(
+            "[AuthorizationModal] Parsed personalData from liteDb:",
+            parsedData
+          );
+
+          if (parsedData.data) {
+            dataToSend = parsedData.data;
+            console.log(
+              "[AuthorizationModal] Extracted data field from liteDb:",
+              dataToSend
+            );
+          } else {
+            dataToSend = localWallet.personalData;
+          }
+        } catch (e) {
+          console.log(
+            "[AuthorizationModal] Failed to parse liteDb data as JSON, using as is"
+          );
+          dataToSend = localWallet.personalData;
+        }
+      } else if (apiWalletData && apiWalletData.personalData) {
+        console.log("[AuthorizationModal] Using data from API");
+        try {
+          if (
+            typeof apiWalletData.personalData === "string" &&
+            apiWalletData.personalData.trim()
+          ) {
+            const parsedData = JSON.parse(apiWalletData.personalData);
+            console.log(
+              "[AuthorizationModal] Parsed personalData from API:",
+              parsedData
+            );
+
+            if (parsedData.data) {
+              dataToSend = parsedData.data;
+              console.log(
+                "[AuthorizationModal] Extracted data field from API:",
+                dataToSend
+              );
+            } else {
+              dataToSend = apiWalletData.personalData;
+            }
+          } else {
+            dataToSend = apiWalletData.personalData;
+          }
+        } catch (e) {
+          console.log(
+            "[AuthorizationModal] Failed to parse API data as JSON, using as is"
+          );
+          dataToSend = apiWalletData.personalData;
+        }
+      }
+
+      console.log("[AuthorizationModal] Final data to send:", dataToSend);
+
       const apiUrl =
         process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
+
+      const payload = {
+        personalData: {
+          walletAddress: walletAddress,
+          data: dataToSend,
+        },
+        agentModel: selectedModel,
+        prompt: "",
+      };
+
+      console.log(
+        "[AuthorizationModal] Sending payload to API:",
+        JSON.stringify(payload)
+      );
+
       const response = await fetch(`${apiUrl}/user-data/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          personalData: {
-            walletAddress: walletAddress || "request_new_backend_key",
-            data: "",
-          },
-          agentModel: selectedModel,
-          prompt: "",
-        }),
+        body: JSON.stringify(payload),
         mode: "cors",
       });
 
@@ -51,6 +151,7 @@ export default function AuthorizationModal({
       }
 
       const data = await response.json();
+      console.log("[AuthorizationModal] API response:", JSON.stringify(data));
 
       const backendPublicAddress = data.backendPublicAddress;
       setBackendAddress(backendPublicAddress);
@@ -60,7 +161,7 @@ export default function AuthorizationModal({
       setIsComplete(true);
       onSubmit(true);
     } catch (err) {
-      console.error("Error during authorization:", err);
+      console.error("[AuthorizationModal] Error during authorization:", err);
       setError(
         err instanceof Error ? err.message : "An unknown error occurred"
       );

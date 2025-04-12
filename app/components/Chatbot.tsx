@@ -5,6 +5,7 @@ import AuthorizationModal from "./AuthorizationModal";
 import { connectToMetaMask } from "../services/metamask";
 import { sendUserData, getWalletData } from "../services/userDataApi";
 import { callAI } from "../services/aiServices";
+import { liteDb } from "../db";
 
 // Define ChatMessage interface to match the one in aiServices.ts
 interface ChatMessage {
@@ -219,11 +220,25 @@ export default function Chatbot() {
         },
       ]);
 
+      // Use the stored wallet address if available, otherwise connect
       let address = walletAddress;
+      console.log("[Chatbot] Initial wallet address:", address);
+      console.log("[Chatbot] Wallet address type:", typeof address);
+      console.log(
+        "[Chatbot] Wallet address length:",
+        address ? address.length : 0
+      );
+
       if (!address) {
+        console.log(
+          "[Chatbot] No wallet address stored, connecting to MetaMask..."
+        );
         const connectedAddress = await connectToMetaMask();
         address = connectedAddress || undefined;
         if (address) {
+          console.log("[Chatbot] Connected to MetaMask, address:", address);
+          console.log("[Chatbot] Connected address type:", typeof address);
+          console.log("[Chatbot] Connected address length:", address.length);
           setWalletAddress(address);
         }
       }
@@ -242,7 +257,77 @@ export default function Chatbot() {
         },
       ]);
 
-      const walletData = await getWalletData(address);
+      // 방법 1: API를 통해 데이터 가져오기 (기존 방식)
+      console.log("[Chatbot] Fetching wallet data from API for:", address);
+      const apiWalletData = await getWalletData(address);
+      console.log(
+        "[Chatbot] Retrieved wallet data from API:",
+        JSON.stringify(apiWalletData)
+      );
+
+      // 방법 2: liteDb에서 직접 데이터 가져오기 (새로운 방식)
+      console.log("[Chatbot] Fetching wallet data from liteDb for:", address);
+      const localWallet = await liteDb.getWalletByAddress(address);
+      console.log(
+        "[Chatbot] Retrieved wallet data from liteDb:",
+        JSON.stringify(localWallet)
+      );
+
+      // liteDb에서 가져온 데이터를 우선 사용
+      let dataToSend = "";
+
+      // liteDb에서 데이터를 가져왔다면 그것을 사용
+      if (localWallet && localWallet.personalData) {
+        console.log("[Chatbot] Using data from liteDb");
+        try {
+          const parsedData = JSON.parse(localWallet.personalData);
+          console.log("[Chatbot] Parsed personalData from liteDb:", parsedData);
+
+          if (parsedData.data) {
+            dataToSend = parsedData.data;
+            console.log(
+              "[Chatbot] Extracted data field from liteDb:",
+              dataToSend
+            );
+          } else {
+            dataToSend = localWallet.personalData;
+          }
+        } catch (e) {
+          console.log(
+            "[Chatbot] Failed to parse liteDb data as JSON, using as is"
+          );
+          dataToSend = localWallet.personalData;
+        }
+      } else if (apiWalletData && apiWalletData.personalData) {
+        console.log("[Chatbot] Using data from API");
+        try {
+          if (
+            typeof apiWalletData.personalData === "string" &&
+            apiWalletData.personalData.trim()
+          ) {
+            const parsedData = JSON.parse(apiWalletData.personalData);
+            console.log("[Chatbot] Parsed personalData from API:", parsedData);
+
+            if (parsedData.data) {
+              dataToSend = parsedData.data;
+              console.log(
+                "[Chatbot] Extracted data field from API:",
+                dataToSend
+              );
+            } else {
+              dataToSend = apiWalletData.personalData;
+            }
+          } else {
+            dataToSend = apiWalletData.personalData;
+          }
+        } catch (e) {
+          console.log(
+            "[Chatbot] Failed to parse API data as JSON, using as is"
+          );
+          dataToSend = apiWalletData.personalData;
+        }
+      }
+      console.log("[Chatbot] Final data to send:", dataToSend);
 
       setMessages((prevMessages) => [
         ...prevMessages.filter((msg) => !msg.isSurfing),
@@ -263,13 +348,31 @@ export default function Chatbot() {
       const payload = {
         personalData: {
           walletAddress: address,
-          data: walletData.personalData || "",
+          data: dataToSend,
         },
         agentModel: selectedModel,
         prompt: lastUserMessage,
       };
 
-      await sendUserData(payload);
+      console.log("[Chatbot] Payload prepared:", JSON.stringify(payload));
+      console.log(
+        "[Chatbot] Sending payload with address:",
+        payload.personalData.walletAddress
+      );
+      console.log(
+        "[Chatbot] Sending payload with data:",
+        payload.personalData.data
+      );
+      console.log(
+        "[Chatbot] Sending payload data type:",
+        typeof payload.personalData.data
+      );
+      console.log(
+        "[Chatbot] Data content check:",
+        payload.personalData.data ? "Not empty" : "Empty"
+      );
+      const response = await sendUserData(payload);
+      console.log("[Chatbot] API response:", JSON.stringify(response));
 
       setMessages((prevMessages) => [
         ...prevMessages.filter((msg) => !msg.isSurfing),

@@ -11,17 +11,59 @@ export async function getWalletData(
   address: string
 ): Promise<{ personalData?: string }> {
   try {
+    console.log(`[userDataApi] Fetching wallet data for address: ${address}`);
+    console.log(
+      `[userDataApi] Address type: ${typeof address}, length: ${address.length}`
+    );
     const response = await fetch(`/api/wallet-data?address=${address}`);
 
     if (!response.ok) {
-      console.error("Error fetching wallet data:", response.statusText);
+      console.error(
+        "[userDataApi] Error fetching wallet data:",
+        response.statusText
+      );
       return { personalData: "" };
     }
 
     const data = await response.json();
-    return data;
+    console.log(
+      "[userDataApi] Raw wallet data response:",
+      JSON.stringify(data)
+    );
+
+    if (data && typeof data === "object") {
+      let personalData =
+        data.personalData || (data.data && data.data.personalData) || "";
+
+      console.log("[userDataApi] Extracted personalData:", personalData);
+      console.log("[userDataApi] personalData type:", typeof personalData);
+
+      if (!personalData) {
+        console.log("[userDataApi] Empty personalData, returning empty string");
+        return { personalData: "" };
+      }
+
+      if (typeof personalData === "string" && personalData.trim()) {
+        try {
+          const parsedData = JSON.parse(personalData);
+          console.log(
+            "[userDataApi] Successfully parsed personalData JSON:",
+            parsedData
+          );
+
+          return { personalData };
+        } catch (e) {
+          console.log("[userDataApi] Not a valid JSON string, using as is");
+        }
+      }
+
+      return { personalData };
+    }
+
+    console.log("[userDataApi] No data found, returning empty personalData");
+    return { personalData: "" };
   } catch (error) {
-    console.error("Failed to fetch wallet data:", error);
+    console.error("[userDataApi] Failed to fetch wallet data:", error);
     return { personalData: "" };
   }
 }
@@ -32,7 +74,23 @@ export async function sendUserData(payload: UserDataPayload): Promise<any> {
     prompt: payload.prompt || "",
   };
 
-  console.log("Sending payload to API:", JSON.stringify(finalPayload));
+  console.log(
+    "[userDataApi] Sending payload to API:",
+    JSON.stringify(finalPayload)
+  );
+  console.log(
+    "[userDataApi] WalletAddress:",
+    finalPayload.personalData.walletAddress
+  );
+  console.log("[userDataApi] Data to send:", finalPayload.personalData.data);
+  console.log(
+    "[userDataApi] Data type:",
+    typeof finalPayload.personalData.data
+  );
+  console.log(
+    "[userDataApi] Is data empty:",
+    finalPayload.personalData.data === ""
+  );
 
   const apiBaseUrl =
     process.env.NEXT_PUBLIC_API_URL || "https://api-dashboard.a-pl.xyz";
