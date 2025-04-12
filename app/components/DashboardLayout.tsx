@@ -66,9 +66,43 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         agentModel: modelFromCard || selectedModel,
       };
 
-      await sendUserData(payload);
+      console.log("Sending payload:", JSON.stringify(payload));
 
-      console.log("Data successfully sent to API");
+      try {
+        await sendUserData(payload);
+        console.log("Data successfully sent to API");
+      } catch (apiError) {
+        console.error("Error sending data via API service:", apiError);
+
+        // Direct fallback to the external API
+        console.log("Trying direct connection to external API...");
+        try {
+          const directResponse = await fetch(
+            "https://api-dashboard.a-pl.xyz/user-data/",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(payload),
+              mode: "cors",
+            }
+          );
+
+          if (!directResponse.ok) {
+            const errorText = await directResponse.text();
+            console.error("Direct API error:", errorText);
+            throw new Error(
+              `Direct API request failed: ${directResponse.status}`
+            );
+          }
+
+          console.log("Direct API call successful");
+        } catch (directError) {
+          console.error("Direct API call also failed:", directError);
+          throw directError;
+        }
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "An unknown error occurred";

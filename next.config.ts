@@ -11,6 +11,15 @@ const nextConfig: NextConfig = {
     serverComponentsExternalPackages: ["sql.js"],
   },
 
+  async rewrites() {
+    return [
+      {
+        source: "/api/user-data/:path*",
+        destination: "https://api-dashboard.a-pl.xyz/user-data/:path*",
+      },
+    ];
+  },
+
   headers: async () => {
     return [
       {
